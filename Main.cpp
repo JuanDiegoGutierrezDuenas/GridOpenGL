@@ -3,6 +3,12 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 
+// CalBack para actualizar el viewport al redimensionar la ventana
+void framebuffer_size_callback(GLFWwindow* window, int width, int height)
+{
+	glViewport(0, 0, width, height);
+}
+
 //Vertex Shader Source Code
 const char* vertexShaderSource = "#version 330 core\n"
 "layout (location = 0) in vec3 aPos;\n"
@@ -41,7 +47,8 @@ int main()
 	//GLAD CONFIG
 	gladLoadGL();
 
-	glViewport(0, 0, 800, 600);
+	// Registrar callback de tamaño
+	glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
 
 	//SHADERS COMPILATION
 	GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
@@ -60,18 +67,22 @@ int main()
 	glDeleteShader(vertexShader);
 	glDeleteShader(fragmentShader);
 
-	//--VERTEX OF THE GRID
+	//--VERTEX OF THE GRID// grid ampliado para cubrir pantalla al redimensionar
 	std::vector<float> gridVertices;
 	float step = 0.1f;
+	float maxCoord = 10.0f;
+
 
 	//Lineas horizontales y verticales
-	for (float i = -1.0f; i <= 1.0f; i += step) {
+	for (float i = -maxCoord; i <= maxCoord; i += step) {
 
-		gridVertices.push_back(i); gridVertices.push_back(-1.0f); gridVertices.push_back(0.0f);
-		gridVertices.push_back(i); gridVertices.push_back(1.0f); gridVertices.push_back(0.0f);
+		//verticales
+		gridVertices.push_back(i); gridVertices.push_back(-maxCoord); gridVertices.push_back(0.0f);
+		gridVertices.push_back(i); gridVertices.push_back(maxCoord); gridVertices.push_back(0.0f);
 
-		gridVertices.push_back(-1.0f); gridVertices.push_back(i); gridVertices.push_back(0.0f);
-		gridVertices.push_back(1.0f); gridVertices.push_back(i); gridVertices.push_back(0.0f);
+		//Horizontales
+		gridVertices.push_back(-maxCoord); gridVertices.push_back(i); gridVertices.push_back(0.0f);
+		gridVertices.push_back(maxCoord); gridVertices.push_back(i); gridVertices.push_back(0.0f);
 	
 	
 	}
@@ -102,9 +113,30 @@ int main()
 
 		// Activar los shader y el VAO
 		glUseProgram(shaderProgram);
-		glBindVertexArray(VAO);
 
-		//Dibujar usando GL_Lines
+		// Obtener tamaño actual de la ventana
+		int width, height;
+		glfwGetFramebufferSize(window, &width, &height);
+		if (height == 0) height = 1;
+
+		float aspectRatio = (float)width / (float)height;
+		float orthoHeight = 1.0f;
+		float orthoWidth = orthoHeight * aspectRatio;
+		//Matriz ortografica manual que va columna por columna
+		// Mapea[-orthoWidth, orthoWidth] a[-1, 1] y[-orthoHeight, orthoHeight] a[-1, 1]
+		float r = orthoWidth;
+		float t = orthoHeight;
+		float projection[16] = {
+			1.0f / r, 0.0f,     0.0f,  0.0f,
+			0.0f,     1.0f / t, 0.0f,  0.0f,
+			0.0f,     0.0f,    -1.0f,  0.0f,
+			0.0f,     0.0f,     0.0f,  1.0f
+		};
+		//Envia la matriz manual al shader
+		GLuint projloc = glGetUniformLocation(shaderProgram, "projection");
+		glUniformMatrix4fv(projloc, 1, GL_FALSE, projection);
+
+		glBindVertexArray(VAO);
 		glDrawArrays(GL_LINES, 0, gridVertices.size() / 3);
 
 		glfwSwapBuffers(window);
