@@ -15,8 +15,9 @@ const char* vertexShaderSource = "#version 330 core\n"
 "uniform mat4 projection;\n"
 "void main()\n"
 "{\n"
-"  gl_Position = vec4(aPos.x, aPos.y, aPos.z, 1.0);\n"
+" gl_Position = projection * vec4(aPos, 1.0);\n" // <- Cambio aquí
 "}\0";
+
 //Fragment Shader Source Code
 const char* fragmentShaderSource = "#version 330 core\n"
 "out vec4 FragColor;\n"
