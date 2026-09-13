@@ -26,6 +26,24 @@ const char* fragmentShaderSource = "#version 330 core\n"
 " FragColor = vec4(1.0f, 1.0f, 1.0f, 1.0f);\n"
 "}\n\0";
 
+//Funcion de Bresenham
+std::vector<float> generarLineasBresenham(int x0, int y0, int x1, int y1, float escala) {
+	std::vector<float> vertices;
+	int dx = abs(x1 - x0), dy = abs(y1 - y0);
+	int sx = (x0 < x1) ? 1 : -1, sy = (y0 < y1) ? 1 : -1;
+	int err = dx - dy;
+	while (true) {
+		vertices.push_back(x0 * escala);
+		vertices.push_back(y0 * escala);
+		vertices.push_back(0.0f);
+		if (x0 == x1 && y0 == y1) break;
+		int e2 = 2 * err;
+		if (e2 > -dy) { err -= dy; x0 += sx; }
+		if (e2 < dx) { err += dx; y0 += sy; }
+	}
+	return vertices;
+}
+
 int main()
 {
 	// GLFW CONFIG
@@ -104,6 +122,24 @@ int main()
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
 	glBindVertexArray(0);
 
+	// Buffers de la linea
+	float escalaGrid = 0.1f;
+	std::vector<float> lineaVertices = generarLineasBresenham(-5, -2, 8, 5, escalaGrid);
+
+	GLuint lineaVAO, lineaVBO;
+	glGenVertexArrays(1, &lineaVAO);
+	glGenBuffers(1, &lineaVBO);
+	glBindVertexArray(lineaVAO);
+	glBindBuffer(GL_ARRAY_BUFFER, lineaVBO);
+	glBufferData(GL_ARRAY_BUFFER, lineaVertices.size() * sizeof(float), lineaVertices.data(), GL_STATIC_DRAW);
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+	glEnableVertexAttribArray(0);
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+	glBindVertexArray(0);
+
+	glPointSize(5.0f);
+
+
 	// BUCLE DE RENDERIZADO
 	while (!glfwWindowShouldClose(window))
 	{
@@ -140,11 +176,21 @@ int main()
 		glBindVertexArray(VAO);
 		glDrawArrays(GL_LINES, 0, gridVertices.size() / 3);
 
+		//Agregar el dibujo de la linea 
+		glBindVertexArray(lineaVAO);
+		glLineWidth(3.0f);
+		glDrawArrays(GL_LINE_STRIP, 0, lineaVertices.size() / 3);//GL_POINTS se cambia GL_LINE_STRIP dibuja cada pixel calculado
+		
 		glfwSwapBuffers(window);
 	}
 
 	glDeleteVertexArrays(1, &VAO);
 	glDeleteBuffers(1, &VBO);
+
+	//Limpieza
+	glDeleteVertexArrays(1, &lineaVAO);
+	glDeleteBuffers(1, &lineaVBO);
+
 	glDeleteProgram(shaderProgram);
 
 	glfwDestroyWindow(window);
