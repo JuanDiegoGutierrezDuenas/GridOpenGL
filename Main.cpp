@@ -138,9 +138,9 @@ int main()
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
 	glBindVertexArray(0);
 
-	// Buffers de la linea
+	// Buffers de la linea 
 	float escalaGrid = 0.1f;
-	std::vector<float> lineaVertices = generarLineasBresenham(-5, -2, 8, 5, escalaGrid);
+	std::vector<float> lineaVertices = generarLineasBresenham(-3, -3, 3, 3, escalaGrid);// SE PUEDE CAMBIAR LA POSICION DE LA LINEA DE BRESENHAM AQUI//(x0, y0) es el inicio, (x1, y1) es el final
 
 	GLuint lineaVAO, lineaVBO;
 	glGenVertexArrays(1, &lineaVAO);
