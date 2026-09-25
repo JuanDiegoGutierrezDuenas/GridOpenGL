@@ -60,8 +60,62 @@ std::vector<float> generarLineasBresenham(int x0, int y0, int x1, int y1, float 
 	}
 	return vertices;
 }
+//Funcion de Bresenham paar circulo de celdas rellenas
+std::vector<float> generarCirculoBresenham(int cx, int cy, int r, float escala) {
+	std::vector<float> vertices;
+
+	int x = 0;
+	int y = r;
+	int d = 3 - 2 * r;
+
+	//Funcion interna para reutilizar la logica de dibujar el cuadrado en cada celda
+	auto agregarCuadrado = [&](int xc, int yc) {
+		float xMin = xc * escala;
+		float xMax = (xc + 1) * escala;
+		float yMin = yc * escala;
+		float yMax = (yc + 1) * escala;
+
+		//Triangulo 1
+		vertices.push_back(xMin); vertices.push_back(yMin); vertices.push_back(0.0f);
+		vertices.push_back(xMin); vertices.push_back(yMax); vertices.push_back(0.0f);
+		vertices.push_back(xMax); vertices.push_back(yMin); vertices.push_back(0.0f);
+
+		//Triangulo2
+		vertices.push_back(xMin); vertices.push_back(yMax); vertices.push_back(0.0f);
+		vertices.push_back(xMax); vertices.push_back(yMax); vertices.push_back(0.0f);
+		vertices.push_back(xMax); vertices.push_back(yMin); vertices.push_back(0.0f);
+		
+		};
+	// 8 puntos simetricos iniciales
+	while (y >= x) {
+		// simetria de 8 vias
+		agregarCuadrado(cx + x, cy + y);
+		agregarCuadrado(cx - x, cy + y);
+		agregarCuadrado(cx + x, cy - y);
+		agregarCuadrado(cx - x, cy - y);
+		agregarCuadrado(cx + y, cy + x);
+		agregarCuadrado(cx - y, cy + x);
+		agregarCuadrado(cx + y, cy - x);
+		agregarCuadrado(cx - y, cy - x);
+
+		x++;
+
+		//Actualizar el parametro de decision
+		if (d > 0) {
+			y--;
+			d = d + 4 * (x - y) + 10;
+		}
+		else {
+			d = d + 4 * x + 6;
+		}
+
+	}
+	return vertices;
+
+}
 
 
+//Funcion principal
 int main()
 {
 	// GLFW CONFIG
@@ -153,6 +207,23 @@ int main()
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
 	glBindVertexArray(0);
 
+	//Buffers del circulo
+	//Centro (0,0) radio de 6 celdas y escala de 0.1f
+	std::vector<float> circuloVertices = generarCirculoBresenham(5, -3, 4, escalaGrid);
+
+	GLuint circuloVAO, circuloVBO;
+	glGenVertexArrays(1, &circuloVAO);
+	glGenBuffers(1, &circuloVBO);
+
+	glBindVertexArray(circuloVAO);
+	glBindBuffer(GL_ARRAY_BUFFER, circuloVBO);
+	glBufferData(GL_ARRAY_BUFFER, circuloVertices.size() * sizeof(float), circuloVertices.data(), GL_STATIC_DRAW);
+
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+	glEnableVertexAttribArray(0);
+
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+	glBindVertexArray(0);
 
 	// BUCLE DE RENDERIZADO
 	while (!glfwWindowShouldClose(window))
@@ -197,7 +268,13 @@ int main()
 		glBindVertexArray(VAO);
 		glDrawArrays(GL_LINES, 0, gridVertices.size() / 3);
 
-		// DIBUJAR LOS CUADRADOS DE BRESENHAM EN ROJO
+		//Dibujar Circulo de Bresenham
+		glUniform4f(colorLoc, 0.0f, 0.5f, 1.0f, 1.0f); // Azul brillante
+		glBindVertexArray(circuloVAO);
+		//Renderiza los triangulos del circulo
+		glDrawArrays(GL_TRIANGLES, 0, circuloVertices.size() / 3);
+
+		// DIBUJAR LOS CUADRADOS DE BRESENHAM de la linea EN ROJO
 		glUniform4f(colorLoc, 1.0f, 0.0f, 0.0f, 1.0f); // Rojo puro
 		glBindVertexArray(lineaVAO);
 
