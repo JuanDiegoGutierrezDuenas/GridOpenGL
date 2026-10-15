@@ -3,11 +3,98 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 
+//Variables globales para el estado del paint
+enum herramienta { Ninguna, Linea, Circulo};
+herramienta herramientaActual = Linea; //Inicia seleccionando la linea por defecto
+
+//Puntos de control interactivos
+int clickX0 = 0, clicY0 = 0;
+int clickX1 = 0, clickY1 = 0;
+int estadoClick = 0; //0 esperando primer click, 1= esperando segundo click
+
+float escalaGrid = 0.1f;
+bool actualizarBuffers = false;
+
+std::vector<float> lineaVertices;
+std::vector<float> circuloVertices;
+GLuint lineaVAO, lineaVBO;
+GLuint circuloVAO, circuloVBO;
+
+//Declaracion de funciones
+std::vector<float> generarLineasBresenham(int x0, int y0, int x1, int y1, float escala);
+std::vector<float>generarCirculoBresenham(int cx, int cy, int r, float escala);
+
+
 // CalBack para actualizar el viewport al redimensionar la ventana
 void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 {
 	glViewport(0, 0, width, height);
 }
+
+// Interaccion con el teclado: cambiar de herramientas con 'l' y 'c' para usar el paint
+void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
+{
+	if (action == GLFW_PRESS) {
+		if (key == GLFW_KEY_L) {
+			herramientaActual = Linea;
+			estadoClick = 0;
+			std::cout << "Herramienta activa: LINEA(USA 2 CLICKS EN LA GRILLA)" << std::endl;
+		}
+		if (key == GLFW_KEY_C) {
+			herramientaActual = Circulo;
+			estadoClick = 0;
+			std::cout << "Herramienta activa: CIRCULO (Click 1: centro, click 2 Radio) " << std::endl;
+		}
+	}
+}
+
+//Interaccion con el raton: captura de clicks y conversion a coordenadas de la grilla 
+void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
+{
+	if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS)
+	{
+		double mouseX, mouseY;
+		glfwGetCursorPos(window, &mouseX, &mouseY);
+
+		int width, height;
+		glfwGetWindowSize(window, &width, &height);
+		if (height == 0) height = 1;
+
+		// 1. Transformar coordenadas de pantalla de GLFW a Espacio de Proyección Normalizado [-1, 1]
+		float ndcX = (2.0f * mouseX) / width - 1.0f;
+		float ndcY = 1.0f - (2.0f * mouseY) / height;
+
+		// 2. Aplicar la inversa de tu matriz ortográfica manual (Multiplicar por r y t)
+		float aspectRatio = (float)width / (float)height;
+		float orthoHeight = 1.0f;
+		float orthoWidth = orthoHeight * aspectRatio;
+
+		float worldX = ndcX * orthoWidth;
+		float worldY = ndcY * orthoHeight;
+
+		// 3. Convertir de coordenadas del mundo a índices enteros de tu cuadrícula
+		int gridX = std::floor(worldX / escalaGrid);
+		int gridY = std::floor(worldY / escalaGrid);
+
+		// Lógica de estados para el dibujo interactivo
+		if (estadoClick == 0) {
+			clickX0 = gridX;
+			clickY1 = gridY;
+			estadoClick = 1;
+			std::cout << "Primer Click en: (" << clickX0 << ", " << ").Esperando segundo click..." << std::endl;
+
+		}
+		else if (estadoClick == 1) {
+			clickX1 = gridX;
+			clickY1 = gridY;
+			estadoClick = 0; //Reiniciar flujo
+			std::cout << "Segundo Click en (" << clickX1 << ", " << clickY1 << ")" << std::endl;
+			actualizarBuffers = true;
+		}
+	}
+}
+
+
 
 //Vertex Shader Source Code
 const char* vertexShaderSource = "#version 330 core\n"
@@ -120,7 +207,6 @@ int main()
 {
 	// GLFW CONFIG
 	glfwInit();
-
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
@@ -138,8 +224,15 @@ int main()
 	//GLAD CONFIG
 	gladLoadGL();
 
-	// Registrar callback de tamaño
+	// Registrar callback de tamaño // se agrego callback interactivo
 	glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
+	glfwSetMouseButtonCallback(window, mouse_button_callback);
+	glfwSetKeyCallback(window, key_callback);
+
+	std::cout << " -- Control del paint --" << std::endl;
+	std::cout << "Presiona 'L' para linea " << std::endl;
+	std::cout << "Presion 'C' para modo circulo" << std::endl;
+
 
 	//SHADERS COMPILATION
 	GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
@@ -166,12 +259,11 @@ int main()
 
 	//Lineas horizontales y verticales
 	for (float i = -maxCoord; i <= maxCoord; i += step) {
-
-		//verticales
+		// Líneas verticales
 		gridVertices.push_back(i); gridVertices.push_back(-maxCoord); gridVertices.push_back(0.0f);
 		gridVertices.push_back(i); gridVertices.push_back(maxCoord); gridVertices.push_back(0.0f);
 
-		//Horizontales
+		// Líneas horizontales
 		gridVertices.push_back(-maxCoord); gridVertices.push_back(i); gridVertices.push_back(0.0f);
 		gridVertices.push_back(maxCoord); gridVertices.push_back(i); gridVertices.push_back(0.0f);
 	}
@@ -180,61 +272,56 @@ int main()
 	GLuint VAO, VBO;
 	glGenVertexArrays(1, &VAO);
 	glGenBuffers(1, &VBO);
-
 	glBindVertexArray(VAO);
-
 	glBindBuffer(GL_ARRAY_BUFFER, VBO);
 	glBufferData(GL_ARRAY_BUFFER, gridVertices.size() * sizeof(float), gridVertices.data(), GL_STATIC_DRAW);
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+	glEnableVertexAttribArray(0);
 
+	//Crear buffers vacios iniciales para la linea interactiva
+	glGenVertexArrays(1, &lineaVAO); glGenBuffers(1, &lineaVBO);
+	glBindVertexArray(lineaVAO); glBindBuffer(GL_ARRAY_BUFFER, lineaVBO);
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+	glEnableVertexAttribArray(0);
+
+	//Crear Buffers vacios iniciales para el circulo interactivo
+	glGenVertexArrays(1, &circuloVAO); glGenBuffers(1, &circuloVBO);
+	glBindVertexArray(circuloVAO); glBindBuffer(GL_ARRAY_BUFFER, circuloVBO);
 	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
 	glEnableVertexAttribArray(0);
 
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
 	glBindVertexArray(0);
 
-	// Buffers de la linea 
-	float escalaGrid = 0.1f;
-	std::vector<float> lineaVertices = generarLineasBresenham(-3, -3, 3, 3, escalaGrid);// SE PUEDE CAMBIAR LA POSICION DE LA LINEA DE BRESENHAM AQUI//(x0, y0) es el inicio, (x1, y1) es el final
-
-	GLuint lineaVAO, lineaVBO;
-	glGenVertexArrays(1, &lineaVAO);
-	glGenBuffers(1, &lineaVBO);
-	glBindVertexArray(lineaVAO);
-	glBindBuffer(GL_ARRAY_BUFFER, lineaVBO);
-	glBufferData(GL_ARRAY_BUFFER, lineaVertices.size() * sizeof(float), lineaVertices.data(), GL_STATIC_DRAW);
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
-	glEnableVertexAttribArray(0);
-	glBindBuffer(GL_ARRAY_BUFFER, 0);
-	glBindVertexArray(0);
-
-	//Buffers del circulo
-	//Centro (0,0) radio de 6 celdas y escala de 0.1f
-	std::vector<float> circuloVertices = generarCirculoBresenham(5, -3, 4, escalaGrid);
-
-	GLuint circuloVAO, circuloVBO;
-	glGenVertexArrays(1, &circuloVAO);
-	glGenBuffers(1, &circuloVBO);
-
-	glBindVertexArray(circuloVAO);
-	glBindBuffer(GL_ARRAY_BUFFER, circuloVBO);
-	glBufferData(GL_ARRAY_BUFFER, circuloVertices.size() * sizeof(float), circuloVertices.data(), GL_STATIC_DRAW);
-
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
-	glEnableVertexAttribArray(0);
-
-	glBindBuffer(GL_ARRAY_BUFFER, 0);
-	glBindVertexArray(0);
 
 	// BUCLE DE RENDERIZADO
 	while (!glfwWindowShouldClose(window))
 	{
 		glfwPollEvents();
-		//Limpiar pantalla
-		glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
-		glClear(GL_COLOR_BUFFER_BIT);
 
+
+		//Actualizacion de lo buffer al terminar los clics
+		if(actualizarBuffers) {
+			if (herramientaActual == Linea) {
+				lineaVertices = generarLineasBresenham(clickX0, clicY0, clickX1, clickY1, escalaGrid);
+				glBindBuffer(GL_ARRAY_BUFFER, lineaVBO);
+				glBufferData(GL_ARRAY_BUFFER, lineaVertices.size() * sizeof(float), lineaVertices.data(), GL_STATIC_DRAW);
+			}
+			else if (herramientaActual == Circulo) {
+				// El radio es la distancia matemática de celdas entre el click inicial y el final
+				int radio = std::round(std::sqrt(std::pow(clickX1 - clickX0, 2) + std::pow(clickY1 - clicY0, 2)));
+				circuloVertices = generarCirculoBresenham(clickX0, clicY0, radio, escalaGrid);
+				glBindBuffer(GL_ARRAY_BUFFER, circuloVBO);
+				glBufferData(GL_ARRAY_BUFFER, circuloVertices.size() * sizeof(float), circuloVertices.data(), GL_STATIC_DRAW);
+			}
+			actualizarBuffers = false;
+		}
+	
+	
 		// Activar los shader y el VAO
 		glUseProgram(shaderProgram);
+
+
 
 		// Obtener tamaño actual de la ventana
 		int width, height;
@@ -244,10 +331,8 @@ int main()
 		float aspectRatio = (float)width / (float)height;
 		float orthoHeight = 1.0f;
 		float orthoWidth = orthoHeight * aspectRatio;
-
 		float r = orthoWidth;
 		float t = orthoHeight;
-
 		// CORREGIDO: Faltaba el [16] para que sea una matriz real de 4x4
 		float projection[16] = {
 			1.0f / r, 0.0f,     0.0f,  0.0f,
@@ -263,23 +348,24 @@ int main()
 		// Obtener ubicación del uniform del color
 		GLuint colorLoc = glGetUniformLocation(shaderProgram, "objectColor");
 
-		// DIBUJAR LA GRILLA EN BLANCO
-		glUniform4f(colorLoc, 1.0f, 1.0f, 1.0f, 1.0f); // Blanco puro
+		// 1. Dibujar la Grilla en Blanco
+		glUniform4f(colorLoc, 1.0f, 1.0f, 1.0f, 1.0f);
 		glBindVertexArray(VAO);
 		glDrawArrays(GL_LINES, 0, gridVertices.size() / 3);
 
-		//Dibujar Circulo de Bresenham
-		glUniform4f(colorLoc, 0.0f, 0.5f, 1.0f, 1.0f); // Azul brillante
-		glBindVertexArray(circuloVAO);
-		//Renderiza los triangulos del circulo
-		glDrawArrays(GL_TRIANGLES, 0, circuloVertices.size() / 3);
+		// 2. Dibujar la Línea (Si tiene vértices creados) en Rojo
+		if (!lineaVertices.empty()) {
+			glUniform4f(colorLoc, 1.0f, 0.0f, 0.0f, 1.0f);
+			glBindVertexArray(lineaVAO);
+			glDrawArrays(GL_TRIANGLES, 0, lineaVertices.size() / 3);
+		}
 
-		// DIBUJAR LOS CUADRADOS DE BRESENHAM de la linea EN ROJO
-		glUniform4f(colorLoc, 1.0f, 0.0f, 0.0f, 1.0f); // Rojo puro
-		glBindVertexArray(lineaVAO);
-
-		// Dibuja los triángulos de la función modificada
-		glDrawArrays(GL_TRIANGLES, 0, lineaVertices.size() / 3);
+		// 3. Dibujar el Círculo (Si tiene vértices creados) en Azul
+		if (!circuloVertices.empty()) {
+			glUniform4f(colorLoc, 0.0f, 0.5f, 1.0f, 1.0f);
+			glBindVertexArray(circuloVAO);
+			glDrawArrays(GL_TRIANGLES, 0, circuloVertices.size() / 3);
+		}
 
 		glfwSwapBuffers(window);
 	}
@@ -289,11 +375,10 @@ int main()
 	glDeleteBuffers(1, &VBO);
 
 	//Limpieza
-	glDeleteVertexArrays(1, &lineaVAO);
-	glDeleteBuffers(1, &lineaVBO);
-
+	glDeleteVertexArrays(1, &VAO); glDeleteBuffers(1, &VBO);
+	glDeleteVertexArrays(1, &lineaVAO); glDeleteBuffers(1, &lineaVBO);
+	glDeleteVertexArrays(1, &circuloVAO); glDeleteBuffers(1, &circuloVBO);
 	glDeleteProgram(shaderProgram);
-
 	glfwDestroyWindow(window);
 	glfwTerminate();
 	return 0;
