@@ -71,11 +71,11 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
-    <IncludePath>C:\Users\juan2\Desktop\Trabajos universidad\Cuarto semestre\Introduccion a la computacion grafica\GridOpenGL\GridOpenGL\libraries\include;$(IncludePath)</IncludePath>
+    <IncludePath>C:\Users\juan2\Desktop\Trabajos universidad\Cuarto semestre\Introduccion a la computacion grafica\GridOpenGL\GridOpenGL\libraries\include;C:\Users\juan2\Desktop\Trabajos universidad\Cuarto semestre\Introduccion a la computacion grafica\GridOpenGL\GridOpenGL\Externo;$(IncludePath)</IncludePath>
     <LibraryPath>C:\Users\juan2\Desktop\Trabajos universidad\Cuarto semestre\Introduccion a la computacion grafica\GridOpenGL\GridOpenGL\libraries\lib;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <IncludePath>C:\Users\juan2\Desktop\Trabajos universidad\Cuarto semestre\Introduccion a la computacion grafica\GridOpenGL\GridOpenGL\libraries\include;$(IncludePath)</IncludePath>
+    <IncludePath>C:\Users\juan2\Desktop\Trabajos universidad\Cuarto semestre\Introduccion a la computacion grafica\GridOpenGL\GridOpenGL\libraries\include;C:\Users\juan2\Desktop\Trabajos universidad\Cuarto semestre\Introduccion a la computacion grafica\GridOpenGL\GridOpenGL\Externo;$(IncludePath)</IncludePath>
     <LibraryPath>C:\Users\juan2\Desktop\Trabajos universidad\Cuarto semestre\Introduccion a la computacion grafica\GridOpenGL\GridOpenGL\libraries\lib;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
@@ -149,8 +149,26 @@
     </Manifest>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="Externo\ImGui\imgui.cpp" />
+    <ClCompile Include="Externo\ImGui\imgui_demo.cpp" />
+    <ClCompile Include="Externo\ImGui\imgui_draw.cpp" />
+    <ClCompile Include="Externo\ImGui\imgui_impl_glfw.cpp" />
+    <ClCompile Include="Externo\ImGui\imgui_impl_opengl3.cpp" />
+    <ClCompile Include="Externo\ImGui\imgui_tables.cpp" />
+    <ClCompile Include="Externo\ImGui\imgui_widgets.cpp" />
     <ClCompile Include="glad.c" />
     <ClCompile Include="Main.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Externo\ImGui\imconfig.h" />
+    <ClInclude Include="Externo\ImGui\imgui.h" />
+    <ClInclude Include="Externo\ImGui\imgui_impl_glfw.h" />
+    <ClInclude Include="Externo\ImGui\imgui_impl_opengl3.h" />
+    <ClInclude Include="Externo\ImGui\imgui_impl_opengl3_loader.h" />
+    <ClInclude Include="Externo\ImGui\imgui_internal.h" />
+    <ClInclude Include="Externo\ImGui\imstb_rectpack.h" />
+    <ClInclude Include="Externo\ImGui\imstb_textedit.h" />
+    <ClInclude Include="Externo\ImGui\imstb_truetype.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

@@ -2,15 +2,22 @@
 #include <vector>
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
+#include "ImGui/imgui.h"
+#include "ImGui/imgui_impl_glfw.h"
+#include "ImGui/imgui_impl_opengl3.h"
+
+
 
 //Variables globales para el estado del paint
 enum herramienta { Ninguna, Linea, Circulo};
 herramienta herramientaActual = Linea; //Inicia seleccionando la linea por defecto
 
+int estadoClick = 0;
+
 //Puntos de control interactivos
-int clickX0 = 0, clicY0 = 0;
-int clickX1 = 0, clickY1 = 0;
-int estadoClick = 0; //0 esperando primer click, 1= esperando segundo click
+int clickX0 = 0, clickY0 = 0; 
+int clickX1 = 0, clickY1 = 0; 
+
 
 float escalaGrid = 0.1f;
 bool actualizarBuffers = false;
@@ -51,6 +58,9 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
 //Interaccion con el raton: captura de clicks y conversion a coordenadas de la grilla 
 void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 {
+	if(ImGui::GetIO().WantCaptureMouse) {
+		return;
+	}
 	if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS)
 	{
 		double mouseX, mouseY;
@@ -224,6 +234,18 @@ int main()
 	//GLAD CONFIG
 	gladLoadGL();
 
+	//CONFIGURACION IMGUI
+	IMGUI_CHECKVERSION();
+	ImGui::CreateContext();
+	ImGuiIO& io = ImGui::GetIO(); (void)io;
+
+	//Configurar estilo visual
+	ImGui::StyleColorsDark();
+
+	//Iniciar backends para glfw y openGL
+	ImGui_ImplGlfw_InitForOpenGL(window, true);
+	ImGui_ImplOpenGL3_Init("#version 330 core");
+
 	// Registrar callback de tamaño // se agrego callback interactivo
 	glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
 	glfwSetMouseButtonCallback(window, mouse_button_callback);
@@ -295,45 +317,54 @@ int main()
 
 
 	// BUCLE DE RENDERIZADO
+		// BUCLE DE RENDERIZADO (Reemplaza desde tu línea 315 en adelante)
 	while (!glfwWindowShouldClose(window))
 	{
 		glfwPollEvents();
 
+		// 1. INICIAR EL CONTEXTO DE IMGUI INMEDIATAMENTE (Mover esto aquí arriba es el truco)
+		ImGui_ImplOpenGL3_NewFrame();
+		ImGui_ImplGlfw_NewFrame();
+		ImGui::NewFrame();
 
-		//Actualizacion de lo buffer al terminar los clics
-		if(actualizarBuffers) {
+		// 2. DISEÑAR TU VENTANA FLOTANTE DE IMGUI
+		ImGui::Begin("Herramientas del Paint");
+		if (ImGui::Button("Modo Linea")) { herramientaActual = Linea; estadoClick = 0; }
+		if (ImGui::Button("Modo Circulo")) { herramientaActual = Circulo; estadoClick = 0; }
+		ImGui::Text("Herramienta activa: %s", (herramientaActual == Linea) ? "LINEA" : "CIRCULO");
+		ImGui::End();
+
+		// 3. LIMPIAR PANTALLA
+		glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
+		glClear(GL_COLOR_BUFFER_BIT);
+
+		// 4. ACTUALIZACIÓN DE BUFFERS DE BRESENHAM (Tus líneas 321 a 335)
+		if (actualizarBuffers) {
 			if (herramientaActual == Linea) {
-				lineaVertices = generarLineasBresenham(clickX0, clicY0, clickX1, clickY1, escalaGrid);
+				lineaVertices = generarLineasBresenham(clickX0, clickY0, clickX1, clickY1, escalaGrid);
 				glBindBuffer(GL_ARRAY_BUFFER, lineaVBO);
 				glBufferData(GL_ARRAY_BUFFER, lineaVertices.size() * sizeof(float), lineaVertices.data(), GL_STATIC_DRAW);
 			}
 			else if (herramientaActual == Circulo) {
-				// El radio es la distancia matemática de celdas entre el click inicial y el final
-				int radio = std::round(std::sqrt(std::pow(clickX1 - clickX0, 2) + std::pow(clickY1 - clicY0, 2)));
-				circuloVertices = generarCirculoBresenham(clickX0, clicY0, radio, escalaGrid);
+				int radio = std::round(std::sqrt(std::pow(clickX1 - clickX0, 2) + std::pow(clickY1 - clickY0, 2)));
+				circuloVertices = generarCirculoBresenham(clickX0, clickY0, radio, escalaGrid);
 				glBindBuffer(GL_ARRAY_BUFFER, circuloVBO);
 				glBufferData(GL_ARRAY_BUFFER, circuloVertices.size() * sizeof(float), circuloVertices.data(), GL_STATIC_DRAW);
 			}
 			actualizarBuffers = false;
 		}
-	
-	
-		// Activar los shader y el VAO
-		glUseProgram(shaderProgram);
 
-
-
-		// Obtener tamaño actual de la ventana
+		// 5. OBTENER TAMAÑO Y ENVIAR MATRIZ PROJECTION
 		int width, height;
 		glfwGetFramebufferSize(window, &width, &height);
 		if (height == 0) height = 1;
+		glViewport(0, 0, width, height); // Mantiene alineada la pantalla al estirar
 
 		float aspectRatio = (float)width / (float)height;
 		float orthoHeight = 1.0f;
 		float orthoWidth = orthoHeight * aspectRatio;
 		float r = orthoWidth;
 		float t = orthoHeight;
-		// CORREGIDO: Faltaba el [16] para que sea una matriz real de 4x4
 		float projection[16] = {
 			1.0f / r, 0.0f,     0.0f,  0.0f,
 			0.0f,     1.0f / t, 0.0f,  0.0f,
@@ -341,34 +372,39 @@ int main()
 			0.0f,     0.0f,     0.0f,  1.0f
 		};
 
-		// Envia la matriz corregida al shader
+		glUseProgram(shaderProgram);
 		GLuint projloc = glGetUniformLocation(shaderProgram, "projection");
 		glUniformMatrix4fv(projloc, 1, GL_FALSE, projection);
 
-		// Obtener ubicación del uniform del color
 		GLuint colorLoc = glGetUniformLocation(shaderProgram, "objectColor");
 
-		// 1. Dibujar la Grilla en Blanco
+		// 6. DIBUJAR LA GRILLA BLANCA
 		glUniform4f(colorLoc, 1.0f, 1.0f, 1.0f, 1.0f);
 		glBindVertexArray(VAO);
 		glDrawArrays(GL_LINES, 0, gridVertices.size() / 3);
 
-		// 2. Dibujar la Línea (Si tiene vértices creados) en Rojo
+		// 7. DIBUJAR LA LÍNEA ROJA
 		if (!lineaVertices.empty()) {
 			glUniform4f(colorLoc, 1.0f, 0.0f, 0.0f, 1.0f);
 			glBindVertexArray(lineaVAO);
 			glDrawArrays(GL_TRIANGLES, 0, lineaVertices.size() / 3);
 		}
 
-		// 3. Dibujar el Círculo (Si tiene vértices creados) en Azul
+		// 8. DIBUJAR EL CÍRCULO AZUL
 		if (!circuloVertices.empty()) {
 			glUniform4f(colorLoc, 0.0f, 0.5f, 1.0f, 1.0f);
 			glBindVertexArray(circuloVAO);
 			glDrawArrays(GL_TRIANGLES, 0, circuloVertices.size() / 3);
 		}
 
+		// 9. ENVIAR LOS DATOS DE IMGUI A DIBUJAR (Al final de todo el pipeline gráfico)
+		ImGui::Render();
+		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
+		// 10. REFRESCAR MONITOR
 		glfwSwapBuffers(window);
 	}
+
 
 
 	glDeleteVertexArrays(1, &VAO);
@@ -381,5 +417,9 @@ int main()
 	glDeleteProgram(shaderProgram);
 	glfwDestroyWindow(window);
 	glfwTerminate();
+	ImGui_ImplOpenGL3_Shutdown();
+	ImGui_ImplGlfw_Shutdown();
+	ImGui::DestroyContext();
+
 	return 0;
 }
