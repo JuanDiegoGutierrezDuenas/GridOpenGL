@@ -40,6 +40,10 @@ struct FiguraDibujada {
 	GLuint vao;
 	GLsizei conteoVertices;
 	GLenum modoDibujo;
+
+	float r;
+	float g;
+	float b;
 };
 
 //Guarda todas las figuras creadas para que permanezcan visibles en todo el programa
@@ -434,6 +438,10 @@ int main()
 				lineaVertices = generarLineasBresenham(clickX0, clickY0, clickX1, clickY1, escalaGrid);
 				glBufferData(GL_ARRAY_BUFFER, lineaVertices.size() * sizeof(float), lineaVertices.data(), GL_STATIC_DRAW);
 				nuevaFigura.conteoVertices = lineaVertices.size() / 3;
+				
+				nuevaFigura.r = 0.0f;
+				nuevaFigura.g = 1.0f;
+				nuevaFigura.b = 0.0f;
 
 				historialFiguras.push_back(nuevaFigura); // Guarda la línea en el lienzo
 			//Permite que la figura siga dibujandose en los frames posteriores	
@@ -443,6 +451,10 @@ int main()
 				circuloVertices = generarCirculoBresenham(clickX0, clickY0, radio, escalaGrid);
 				glBufferData(GL_ARRAY_BUFFER, circuloVertices.size() * sizeof(float), circuloVertices.data(), GL_STATIC_DRAW);
 				nuevaFigura.conteoVertices = circuloVertices.size() / 3;
+
+				nuevaFigura.r = 1.0f;
+				nuevaFigura.g = 0.0f;
+				nuevaFigura.b = 0.0f;
 
 				historialFiguras.push_back(nuevaFigura); // Guarda el círculo en el lienzo
 			}
@@ -489,7 +501,8 @@ int main()
 
 		// Redibuja las figuras almacenadas en el lienzo
 		for (const auto& fig : historialFiguras) {
-			glUniform4f(colorLoc, 0.9f, 0.1f, 0.4f, 1.0f); // Color magenta/rosa para los dibujos
+
+			glUniform4f(colorLoc,fig.r,fig.g,fig.b,	1.0f);
 			glBindVertexArray(fig.vao);
 			glDrawArrays(fig.modoDibujo, 0, fig.conteoVertices);
 		}
