@@ -1,3 +1,7 @@
+/*
+------------------------------
+PAINT BASADO EN OPENGL UASNDO GLAD, GLFW Y IMGUI
+*/
 #include <iostream>
 #include <vector>
 #include <glad/glad.h>
@@ -6,15 +10,22 @@
 #include "ImGui/imgui_impl_glfw.h"
 #include "ImGui/imgui_impl_opengl3.h"
 
-
-
 //Variables globales para el estado del paint
+//Se establecen las herramientas disponibles para el usuario
+//Determinan que algoritmo de dibujo se va a ejecutar
 enum herramienta { Ninguna, Linea, Circulo};
 herramienta herramientaActual = Linea; //Inicia seleccionando la linea por defecto
 
+//Esta seccion funciona en base a una maquina de estados
+//0 -> espera el primer click
+//1 -> espera el segundo click
+// 
+//Linea: el click 1 = inicio, click 2 = fin
+//Circulo: el click  1 = centro, click 2 = radio
 int estadoClick = 0;
 
-//Puntos de control interactivos
+//Coordenadas de celdas seleccionadas por el usuario
+//Se usan como parametro en bresenham
 int clickX0 = 0, clickY0 = 0; 
 int clickX1 = 0, clickY1 = 0; 
 
@@ -22,12 +33,16 @@ int clickX1 = 0, clickY1 = 0;
 float escalaGrid = 0.1f;
 bool actualizarBuffers = false;
 
+//Almacena la informacion necesaria para volver a dibujar
+//Una figura en cada frame sin recalcular sus vertices
+
 struct FiguraDibujada {
 	GLuint vao;
 	GLsizei conteoVertices;
 	GLenum modoDibujo;
 };
 
+//Guarda todas las figuras creadas para que permanezcan visibles en todo el programa
 std::vector<FiguraDibujada> historialFiguras;
 std::vector<float> lineaVertices;
 std::vector<float> circuloVertices;
@@ -38,13 +53,17 @@ std::vector<float> generarLineasBresenham(int x0, int y0, int x1, int y1, float 
 std::vector<float>generarCirculoBresenham(int cx, int cy, int r, float escala);
 
 
-// CalBack para actualizar el viewport al redimensionar la ventana
+//GLFW ejecuta esta funcion automaticamente cuando la ventana cambia
+// de tamaño, el viewport se adapta para seguir ocupando la ventana
 void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 {
 	glViewport(0, 0, width, height);
 }
 
-// Interaccion con el teclado: cambiar de herramientas con 'l' y 'c' para usar el paint
+// Se gestionan los cambios de herramienta con el teclado
+// L actica el modo linea, C activa el modo circulo
+//Reinicia el estado de clicks para evitar inconsistencias
+
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
 {
 	if (action == GLFW_PRESS) {
@@ -61,7 +80,8 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
 	}
 }
 
-//Interaccion con el raton: captura de clicks y conversion a coordenadas de la grilla 
+//Gestiona los click del raton, conviriendo la posicion del cursor a coordenadas discretas
+// De la cuadricula utilizada por algoritmos de dibujo
 void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 {
 	ImGui_ImplGlfw_MouseButtonCallback(window, button, action, mods);
@@ -78,11 +98,15 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 		glfwGetWindowSize(window, &width, &height);
 		if (height == 0) height = 1;
 
-		// 1. Transformar coordenadas de pantalla de GLFW a Espacio de Proyección Normalizado [-1, 1]
+		// 1. Conversión de coordenadas en píxeles al sistema NDC de OpenGL
+		//NDC va desde -1 a 1
+
 		float ndcX = (2.0f * mouseX) / width - 1.0f;
 		float ndcY = 1.0f - (2.0f * mouseY) / height;
 
-		// 2. Aplicar la inversa de tu matriz ortográfica manual (Multiplicar por r y t)
+		// 2. Conversión de NDC a coordenadas del mundo.
+		//Permite determinar en qué posición lógica de la escena
+		//se encuentra el cursor.
 		float aspectRatio = (float)width / (float)height;
 		float orthoHeight = 1.0f;
 		float orthoWidth = orthoHeight * aspectRatio;
@@ -90,11 +114,14 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 		float worldX = ndcX * orthoWidth;
 		float worldY = ndcY * orthoHeight;
 
-		// 3. Convertir de coordenadas del mundo a índices enteros de tu cuadrícula
+		// 3. Conversión de coordenadas continuas a coordenadas discretas.
+		//Cada valor entero representa una celda de la cuadrícula.
 		int gridX = std::floor(worldX / escalaGrid);
 		int gridY = std::floor(worldY / escalaGrid);
 
-		// Lógica de estados para el dibujo interactivo
+		//Sistema de dos clicks
+		// primer click: almacena punto inicial
+		// Segundo click: completa la figura y activa la generacion de vertices
 				// ... (Código de conversión de coordenadas X y Y del mouse) ...
 
 		if (estadoClick == 0) {
@@ -119,6 +146,8 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 
 
 //Vertex Shader Source Code
+//Recibe los vertices y les aplica la matriz de proyeccion
+//antes de enviarlos al pipeline grafico
 const char* vertexShaderSource = "#version 330 core\n"
 "layout (location = 0) in vec3 aPos;\n"
 "uniform mat4 projection;\n"
@@ -128,6 +157,7 @@ const char* vertexShaderSource = "#version 330 core\n"
 "}\0";
 
 //Fragment Shader Source Code
+//Define el color de los fragmentos generados
 const char* fragmentShaderSource = "#version 330 core\n"
 "out vec4 FragColor;\n"
 "uniform vec4 objectColor;\n" // <- CORREGIDO: Todo en minúsculas para evitar conflictos
@@ -137,6 +167,10 @@ const char* fragmentShaderSource = "#version 330 core\n"
 "}\n\0";
 
 // Funcion de Bresenham Modificada para alinear los cuadrados dentro de la grilla
+// 
+//Cada celda recorrida por la linea se representa mediante un
+// cuadrado compuesto por dos triangulos
+
 std::vector<float> generarLineasBresenham(int x0, int y0, int x1, int y1, float escala) {
 	std::vector<float> vertices;
 	int dx = abs(x1 - x0), dy = abs(y1 - y0);
@@ -144,20 +178,20 @@ std::vector<float> generarLineasBresenham(int x0, int y0, int x1, int y1, float 
 	int err = dx - dy;
 
 	while (true) {
-		// CORRECCIÓN DE ALINEACIÓN: 
-		// Ahora cx y cy definen la esquina inferior izquierda de la celda de la grilla,
-		// en lugar del centro matemático desfasado.
+	
+		// cada coordenada representa una celda de la cuadricula
+		// se calculan los limites reales del cuadrado que ocupara esa celda
 		float xMin = x0 * escala;
 		float xMax = (x0 + 1) * escala;
 		float yMin = y0 * escala;
 		float yMax = (y0 + 1) * escala;
 
-		// Triángulo 1 (Abajo-Izquierda, Arriba-Izquierda, Abajo-Derecha)
+		// Triángulo 1 forma la mitad inferior del cuadrado
 		vertices.push_back(xMin); vertices.push_back(yMin); vertices.push_back(0.0f);
 		vertices.push_back(xMin); vertices.push_back(yMax); vertices.push_back(0.0f);
 		vertices.push_back(xMax); vertices.push_back(yMin); vertices.push_back(0.0f);
 
-		// Triángulo 2 (Arriba-Izquierda, Arriba-Derecha, Abajo-Derecha)
+		// Triángulo 2 completa la celda cuadrada
 		vertices.push_back(xMin); vertices.push_back(yMax); vertices.push_back(0.0f);
 		vertices.push_back(xMax); vertices.push_back(yMax); vertices.push_back(0.0f);
 		vertices.push_back(xMax); vertices.push_back(yMin); vertices.push_back(0.0f);
@@ -170,6 +204,7 @@ std::vector<float> generarLineasBresenham(int x0, int y0, int x1, int y1, float 
 	return vertices;
 }
 //Funcion de Bresenham para circulo de celdas rellenas
+// Utiliza simetria de ocho octantes para minimizar calculos 
 std::vector<float> generarCirculoBresenham(int cx, int cy, int r, float escala) {
 	std::vector<float> vertices;
 
@@ -177,7 +212,8 @@ std::vector<float> generarCirculoBresenham(int cx, int cy, int r, float escala) 
 	int y = r;
 	int d = 3 - 2 * r;
 
-	//Funcion interna para reutilizar la logica de dibujar el cuadrado en cada celda
+	//Funcion auxiliar que genera los vertices de la celda
+	// evitando la repeticion de codigo cada vez que necesita dibujar un punto
 	auto agregarCuadrado = [&](int xc, int yc) {
 		float xMin = xc * escala;
 		float xMax = (xc + 1) * escala;
@@ -195,9 +231,16 @@ std::vector<float> generarCirculoBresenham(int cx, int cy, int r, float escala) 
 		vertices.push_back(xMax); vertices.push_back(yMin); vertices.push_back(0.0f);
 		
 		};
+
 	// 8 puntos simetricos iniciales
+	//Mientras no se supere la diagonal principal
+	//se generan los ocho puntos equivalente del circulo
+
 	while (y >= x) {
+
 		// simetria de 8 vias
+		//Reflejo del punto calculado de los ocho octantes del circulo
+
 		agregarCuadrado(cx + x, cy + y);
 		agregarCuadrado(cx - x, cy + y);
 		agregarCuadrado(cx + x, cy - y);
@@ -224,7 +267,9 @@ std::vector<float> generarCirculoBresenham(int cx, int cy, int r, float escala) 
 }
 
 
-//Funcion principal
+//*****************Funcion principal*****************
+//Punto de entrada del programa 
+// el cual inicializa OpenGL,GLFW. ImGui y ejecuta el bucle principal
 int main()
 {
 	// GLFW CONFIG
@@ -271,6 +316,9 @@ int main()
 
 
 	//SHADERS COMPILATION
+	//Compilacion y enlazado de shaders
+	//Estos programas se ejecutan directamente en la GPU
+
 	GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
 	glShaderSource(vertexShader, 1, &vertexShaderSource, NULL);
 	glCompileShader(vertexShader);
@@ -288,6 +336,9 @@ int main()
 	glDeleteShader(fragmentShader);
 
 	//--VERTEX OF THE GRID// grid ampliado para cubrir pantalla al redimensionar
+	//Generacion de vertices en la cuadricula
+	//Se crea una red de lineas horizontales y verticales para el area de dibujo
+
 	std::vector<float> gridVertices;
 	float step = 0.1f;
 	float maxCoord = 10.0f;
@@ -323,7 +374,10 @@ int main()
 
 
 
-		// BUCLE DE RENDERIZADO (Reemplaza desde tu línea 315 en adelante)
+	// BUCLE DE RENDERIZADO 
+    // Bucle principal de la aplicacion que se ejecuta continuamente
+	// hasta que el usuario cierre la ventana
+	   
 	while (!glfwWindowShouldClose(window))
 	{
 		glfwPollEvents();
@@ -338,14 +392,14 @@ int main()
 		ImGui::Begin("Herramientas del Paint");
 
 		if (ImGui::Button("Modo Linea")) {
-			herramientaActual = Linea; // Asegúrate de que coincida con tu enum (Linea o LINEA)
+			herramientaActual = Linea; 
 			estadoClick = 0;           // Reinicia el flujo de clics
 			lineaVertices.clear();     // Borra el trazo anterior en pantalla si deseas limpiar
 			circuloVertices.clear();   // Borra el círculo para dar espacio a la nueva línea
 		}
 
 		if (ImGui::Button("Modo Circulo")) {
-			herramientaActual = Circulo; // Asegúrate de que coincida con tu enum
+			herramientaActual = Circulo; 
 			estadoClick = 0;             // Reinicia el flujo de clics
 			lineaVertices.clear();       // Borra la línea anterior
 			circuloVertices.clear();     // Borra el trazo anterior
@@ -361,7 +415,10 @@ int main()
 		glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT);
 
-		// 4. ACTUALIZACIÓN DE BUFFERS DE BRESENHAM (Tus líneas 321 a 335)
+		// 4. ACTUALIZACIÓN DE BUFFERS DE BRESENHAM 
+		// Si se completa la figura por medio de dos clicks
+		// Se generan y se envian los vertices a la GPU
+
 		if (actualizarBuffers) {
 			GLuint nuevaVAO, nuevaVBO;
 			glGenVertexArrays(1, &nuevaVAO);
@@ -379,6 +436,7 @@ int main()
 				nuevaFigura.conteoVertices = lineaVertices.size() / 3;
 
 				historialFiguras.push_back(nuevaFigura); // Guarda la línea en el lienzo
+			//Permite que la figura siga dibujandose en los frames posteriores	
 			}
 			else if (herramientaActual == Circulo) {
 				int radio = std::round(std::sqrt(std::pow(clickX1 - clickX0, 2) + std::pow(clickY1 - clickY0, 2)));
@@ -398,6 +456,8 @@ int main()
 		}
 
 		// 5. OBTENER TAMAÑO Y ENVIAR MATRIZ PROJECTION
+		// Construye la proyeccion ortografica
+		// Mantiene la escala de la cuadricula independientemente del tamaño de la ventana
 		int width, height;
 		glfwGetFramebufferSize(window, &width, &height);
 		if (height == 0) height = 1;
@@ -427,6 +487,7 @@ int main()
 		glBindVertexArray(VAO);
 		glDrawArrays(GL_LINES, 0, gridVertices.size() / 3);
 
+		// Redibuja las figuras almacenadas en el lienzo
 		for (const auto& fig : historialFiguras) {
 			glUniform4f(colorLoc, 0.9f, 0.1f, 0.4f, 1.0f); // Color magenta/rosa para los dibujos
 			glBindVertexArray(fig.vao);
@@ -435,14 +496,16 @@ int main()
 		glBindVertexArray(0);
 
 		// 9. ENVIAR LOS DATOS DE IMGUI A DIBUJAR (Al final de todo el pipeline gráfico)
+		// Renderiza la interfaz grafica(botones, textos, ventanas)
 		ImGui::Render();
 		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
 		// 10. REFRESCAR MONITOR
+		//Intercambia el buffer trasero y delantero
+		//Muestra en la pantalla los dibujos
+		// 
 		glfwSwapBuffers(window);
 	}
-
-
 
 	glDeleteVertexArrays(1, &VAO);
 	glDeleteBuffers(1, &VBO);
