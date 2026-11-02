@@ -13,7 +13,7 @@ PAINT BASADO EN OPENGL UASNDO GLAD, GLFW Y IMGUI
 //Variables globales para el estado del paint
 //Se establecen las herramientas disponibles para el usuario
 //Determinan que algoritmo de dibujo se va a ejecutar
-enum herramienta { Ninguna, Linea, Circulo};
+enum herramienta { Ninguna, Linea, Circulo,Poligono};
 herramienta herramientaActual = Linea; //Inicia seleccionando la linea por defecto
 
 //Esta seccion funciona en base a una maquina de estados
@@ -36,7 +36,7 @@ bool actualizarBuffers = false;
 //Almacena la informacion necesaria para volver a dibujar
 //Una figura en cada frame sin recalcular sus vertices
 
-struct FiguraDibujada {
+struct FiguraDibujada { //struct agrupa las variables en distintos tipos de datos bajo un mismo nombre
 	GLuint vao;
 	GLsizei conteoVertices;
 	GLenum modoDibujo;
@@ -45,6 +45,13 @@ struct FiguraDibujada {
 	float g;
 	float b;
 };
+struct Punto
+{
+	int x;
+	int y;
+};
+
+std::vector<Punto> verticesPoligono;
 
 //Guarda todas las figuras creadas para que permanezcan visibles en todo el programa
 std::vector<FiguraDibujada> historialFiguras;
@@ -56,6 +63,18 @@ GLuint VAO, VBO;
 std::vector<float> generarLineasBresenham(int x0, int y0, int x1, int y1, float escala);
 std::vector<float>generarCirculoBresenham(int cx, int cy, int r, float escala);
 
+//Funcion que comprueba el cierre del poligono
+bool poligonoCerrado()
+{
+	if (verticesPoligono.size() < 3)
+		return false;
+
+	Punto primero = verticesPoligono.front();
+	Punto ultimo = verticesPoligono.back();
+
+	return (primero.x == ultimo.x &&
+		primero.y == ultimo.y);
+}
 
 //GLFW ejecuta esta funcion automaticamente cuando la ventana cambia
 // de tamaño, el viewport se adapta para seguir ocupando la ventana
@@ -137,7 +156,55 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 		else if (estadoClick == 1) {
 			clickX1 = gridX;
 			clickY1 = gridY;
-			estadoClick = 0; // Reiniciar flujo para el siguiente dibujo
+			//Funcion que guarda los vertices
+			if (herramientaActual == Poligono)
+			{
+				if (verticesPoligono.empty())
+				{
+					verticesPoligono.push_back(
+						{
+							clickX0,
+							clickY0
+						});
+				}
+
+				verticesPoligono.push_back(
+
+					{
+						clickX1,
+						clickY1
+					});
+				//Deteccion del cierre del poligono
+				if (poligonoCerrado())
+				{
+					std::cout
+						<< "Poligono cerrado"
+						<< std::endl;
+				}
+				if (poligonoCerrado())
+				{
+					int lados = verticesPoligono.size() - 1;
+
+					if (lados == 3)
+						std::cout << "TRIANGULO" << std::endl;
+
+					else if (lados == 4)
+						std::cout << "CUADRADO O RECTANGULO" << std::endl;
+				}
+
+			}
+			//Dibujo de varias aristas consecutivas
+			if (herramientaActual == Poligono)
+			{
+				clickX0 = clickX1;
+				clickY0 = clickY1;
+
+				estadoClick = 1;// Seguir esperando nuevos vertices
+			}
+			else
+			{
+				estadoClick = 0; //Lineas y circulos terminan aqui
+			}
 
 			// OBLIGATORIO: Forzar a que se active el buffer al hacer el segundo click
 			actualizarBuffers = true;
@@ -402,12 +469,23 @@ int main()
 			circuloVertices.clear();   // Borra el círculo para dar espacio a la nueva línea
 		}
 
-		if (ImGui::Button("Modo Circulo")) {
-			herramientaActual = Circulo; 
+		if (ImGui::Button("Modo Circulo"))
+		{
+			herramientaActual = Circulo;
 			estadoClick = 0;             // Reinicia el flujo de clics
 			lineaVertices.clear();       // Borra la línea anterior
 			circuloVertices.clear();     // Borra el trazo anterior
 		}
+
+		if (ImGui::Button("Modo Poligono"))
+			{
+				herramientaActual = Poligono;
+
+				estadoClick = 0;
+
+				verticesPoligono.clear();
+			}
+		
 
 		// Mostrar dinámicamente la herramienta activa en el menú
 		ImGui::Text("Herramienta activa: %s", (herramientaActual == Linea) ? "LINEA" : "CIRCULO");
@@ -457,6 +535,28 @@ int main()
 				nuevaFigura.b = 0.0f;
 
 				historialFiguras.push_back(nuevaFigura); // Guarda el círculo en el lienzo
+			}
+			//Generacion de lineas automaticamente
+			else if (herramientaActual == Poligono)
+			{
+				lineaVertices =
+					generarLineasBresenham(
+						clickX0,
+						clickY0,
+						clickX1,
+						clickY1,
+						escalaGrid);
+
+				glBufferData(
+					GL_ARRAY_BUFFER,
+					lineaVertices.size() * sizeof(float),
+					lineaVertices.data(),
+					GL_STATIC_DRAW);
+
+				nuevaFigura.conteoVertices =
+					lineaVertices.size() / 3;
+
+				historialFiguras.push_back(nuevaFigura);
 			}
 
 			glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
