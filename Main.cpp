@@ -13,8 +13,8 @@ PAINT BASADO EN OPENGL UASNDO GLAD, GLFW Y IMGUI
 //Variables globales para el estado del paint
 //Se establecen las herramientas disponibles para el usuario
 //Determinan que algoritmo de dibujo se va a ejecutar
-enum herramienta { Ninguna, Linea, Circulo,Poligono};
-herramienta herramientaActual = Linea; //Inicia seleccionando la linea por defecto
+enum herramienta { Ninguna, Linea, Circulo,Poligono,};
+herramienta herramientaActual = Ninguna; //Inicia seleccionando la linea por defecto
 
 //Esta seccion funciona en base a una maquina de estados
 //0 -> espera el primer click
@@ -28,6 +28,9 @@ int estadoClick = 0;
 //Se usan como parametro en bresenham
 int clickX0 = 0, clickY0 = 0; 
 int clickX1 = 0, clickY1 = 0; 
+
+//Color seleccionado desde ImGui
+float colorFigura[4] = { 1.0,0.0f,0.0f,1.0f };//Rojo,Verde,azul,Alpha
 
 
 float escalaGrid = 0.1f;
@@ -44,6 +47,7 @@ struct FiguraDibujada { //struct agrupa las variables en distintos tipos de dato
 	float r;
 	float g;
 	float b;
+	float a;
 };
 struct Punto
 {
@@ -486,9 +490,31 @@ int main()
 				verticesPoligono.clear();
 			}
 		
+		ImGui::Separator();
 
+		ImGui::Text("Color de la figura");
+
+		ImGui::ColorEdit4("##ColorFigura",colorFigura);
+
+		//Nombre herramienta en menu
+		const char* nombreHerramienta = "NINGUNA";
+
+		switch (herramientaActual)
+		{
+		case Linea:
+			nombreHerramienta = "LINEA";
+			break;
+
+		case Circulo:
+			nombreHerramienta = "CIRCULO";
+			break;
+
+		case Poligono:
+			nombreHerramienta = "POLIGONO";
+			break;
+		}
 		// Mostrar dinámicamente la herramienta activa en el menú
-		ImGui::Text("Herramienta activa: %s", (herramientaActual == Linea) ? "LINEA" : "CIRCULO");
+		ImGui::Text("Herramienta activa: %s", nombreHerramienta);
 
 		ImGui::End();
 
@@ -516,10 +542,11 @@ int main()
 				lineaVertices = generarLineasBresenham(clickX0, clickY0, clickX1, clickY1, escalaGrid);
 				glBufferData(GL_ARRAY_BUFFER, lineaVertices.size() * sizeof(float), lineaVertices.data(), GL_STATIC_DRAW);
 				nuevaFigura.conteoVertices = lineaVertices.size() / 3;
-				
-				nuevaFigura.r = 0.0f;
-				nuevaFigura.g = 1.0f;
-				nuevaFigura.b = 0.0f;
+
+				nuevaFigura.r = colorFigura[0];
+				nuevaFigura.g = colorFigura[1];
+				nuevaFigura.b = colorFigura[2];
+				nuevaFigura.a = colorFigura[3];
 
 				historialFiguras.push_back(nuevaFigura); // Guarda la línea en el lienzo
 			//Permite que la figura siga dibujandose en los frames posteriores	
@@ -530,9 +557,10 @@ int main()
 				glBufferData(GL_ARRAY_BUFFER, circuloVertices.size() * sizeof(float), circuloVertices.data(), GL_STATIC_DRAW);
 				nuevaFigura.conteoVertices = circuloVertices.size() / 3;
 
-				nuevaFigura.r = 1.0f;
-				nuevaFigura.g = 0.0f;
-				nuevaFigura.b = 0.0f;
+				nuevaFigura.r = colorFigura[0];
+				nuevaFigura.g = colorFigura[1];
+				nuevaFigura.b = colorFigura[2];
+				nuevaFigura.a = colorFigura[3];
 
 				historialFiguras.push_back(nuevaFigura); // Guarda el círculo en el lienzo
 			}
@@ -555,6 +583,11 @@ int main()
 
 				nuevaFigura.conteoVertices =
 					lineaVertices.size() / 3;
+
+				nuevaFigura.r = colorFigura[0];
+				nuevaFigura.g = colorFigura[1];
+				nuevaFigura.b = colorFigura[2];
+				nuevaFigura.a = colorFigura[3];
 
 				historialFiguras.push_back(nuevaFigura);
 			}
