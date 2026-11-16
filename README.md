@@ -84,6 +84,17 @@ Paint OpenGL
 | **`Bucket`** | Flood fill |
 | **`Transformations`** | Rotation, Scale, Translation |
 
+**Algorithms Implemented**
+===============
+### Bresenham Line Algorithm
+Used to rasterize discrete line segments.
+#### Bresenham Circle Algorithm
+Uses eight-way symmetry and a decision parameter.
+#### Flood Fill
+Implemented using Breadth-First Search (BFS) and Queue.
+#### Geometric Transformations
+Translation, rotation and scaling trough Model Matrix
+
 **Branch Map**
 ===============
     main
@@ -124,4 +135,75 @@ Paint OpenGL
 **Suggested Learning Path**
 ===============
 1. **`main()`** -GLFW + GLAD + Shaders = OpenGl initialization
-2. **`mouse_button_callback()`** Mouse -> NDC (Normalized device coordinates-> World Space -> = Coordinates System  
+2. **`mouse_button_callback()`** Mouse -> NDC (Normalized device coordinates-> World Space -> = Coordinates System
+3. **`generarLineasBresenham()`** Raster -> Accumulated Error -> Discrete Route
+4. **`generarCirculoBresenham()`** Eight octants simetry -> parameter of decition
+5. **`floodFill()`** BFS(Breadth-First Search) -> Queue -> Transversal in matrices
+6. **`Model Matrix`** Translation -> Rotation -> Scale
+7. **`ImGui`** Inmediate Interface -> Widgets -> Interaction with OpenGL
+
+# Build Notes 
+Requirements
+- Visual Studio 2026
+- OpenGL 3.3+
+- GLFW
+- GLAD
+- ImGui
+  
+### Includes
+
+#include <glad/glad.h>
+
+#include <GLFW/glfw3.h>
+
+#include "imgui.h"
+
+#include "imgui_impl_glfw.h"
+
+### Compilation
+
+Configurate
+
+    C/C++
+     └── Additional Include Directories
+    
+    Linker
+     └── Additional Library Directories
+    
+    Linker/Input
+     └── opengl32.lib
+     └── glfw3.lib
+     
+### Function
+
+generarLineasBresenham()
+
+generarCirculoBresenham()
+
+floodFill()
+
+generarTriangulo()
+
+### structure
+
+
+FiguraDibujada
+
+Punto
+
+### Enumerations
+
+herramienta
+
+**Controls**
+===============
+| Action | Control | 
+|--------|------|
+| **`Draw Line`** | Line Button or key L |
+| **`Draw Circle`** | Circle Button or key C |
+| **`Draw Polygon`** | Polygon Button |
+| **`Create Square`** | Square Button |
+| **`Create Triangle`** | Triangle Button |
+| **`Bucket`** | Bucket Button |
+| **`Transformations`** | Slider Rotation, slide move X/Y  |
+| **`Clean canvas `** | Clean Button  |
