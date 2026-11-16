@@ -120,3 +120,8 @@ Paint OpenGL
 | **`feature-imgui`** | Development | UI | tools panel |
 | **`feature-transformations`** | Development | Transformations | Rotation,Scale,Translation |
 | **`final-release`** | Delivery | Consolidation | Delivery of the final exam  |
+
+**Suggested Learning Path**
+===============
+1. **`main()`** -GLFW + GLAD + Shaders = OpenGl initialization
+2. **`mouse_button_callback()`** Mouse -> NDC (Normalized device coordinates-> World Space -> = Coordinates System  
