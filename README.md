@@ -34,51 +34,89 @@ Remote:https://github.com/JuanDiegoGutierrezDuenas/GridOpenGL
 ===============
 Paint OpenGL
 
-│
+    │
+    ├── User input
+    │   ├── Mouse
+    │   ├── keyboard
+    │   └── ImGui
+    │
+    ├── State Machines
+    │   ├── First Click
+    │   └── Second Click
+    │
+    ├── Drawing Algorithms
+    │   ├── Bresenham Line
+    │   ├── Bresenham Círcle
+    │   ├── Square
+    │   ├── Triangle
+    │   └── Flood Fill
+    │
+    ├── Figure Management
+    │   ├── VAO
+    │   ├── VBO
+    │   └── History
+    │
+    └── OpenGL Rendering
+     ├── Vertex Shader  
+     ├── Fragment Shader
+     └── ImGui Interface
 
-├── Entrada de usuario
+**Used Technologies**
+===============
+| Technology | Use | 
+|--------|------|
+| **`C++`** | Principal Logic |
+| **`OpenGL 3.3`** | Render |
+| **`GLFW`** | Window and events |
+| **`GLAD`** | Loading OpenGL functions |
+| **`ImGui`** | Graphical interface  |
+| **`STL`** | Vectors and queues |
 
-│   ├── Mouse
+**Available Tools**
+===============
+| Tool | Description | 
+|--------|------|
+| **`Line`** | Bresenham Algorithms |
+| **`Circle`** | Bresenham Algorithms |
+| **`Polygon`** | Segment Draw |
+| **`Square`** | Square Based in Bresenham |
+| **`Triangle`** | Equilateral triangles |
+| **`Bucket`** | Flood fill |
+| **`Transformations`** | Rotation, Scale, Translation |
 
-│   ├── Teclado
-│   └── ImGui
-│
-├── Máquina de Estados
+**Branch Map**
+===============
+    main
+    │
+    ├── feature-bresenham-line
+    │
+    ├── feature-bresenham-circle
+    │
+    ├── feature-polygons
+    │
+    ├── feature-squares
+    │
+    ├── feature-triangles
+    │
+    ├── feature-floodfill
+    │
+    ├── feature-imgui
+    │
+    ├── feature-transformations
+    │
+    └── final-release
 
-│   ├── Primer Click
-
-│   └── Segundo Click
-
-│
-
-├── Algoritmos de Dibujo
-
-│   ├── Bresenham Línea
-
-│   ├── Bresenham Círculo
-
-│   ├── Cuadrado
-
-│   ├── Triángulo
-
-│   └── Flood Fill
-
-│
-
-├── Gestión de Figuras
-
-│   ├── VAO
-
-│   ├── VBO
-
-│   └── Historial
-
-│
-
-└── Renderizado OpenGL
-
-│  ├── Vertex Shader
-    
-│ ├── Fragment Shader
-    
-│ └── ImGui Interface
+**Branch Roles**
+===============
+| Branch | Role | Focus | Content | 
+|--------|------|--------|------|
+| **`Main`** | Production  | stable code  | final version completely functional | 
+| **`feature-bresenham-line`** | Development  | Raster | Implementation of the line algorithm | 
+| **`feature-bresenham-circle** | Development | Raster | Implementation of the circle | 
+| **`feature-polygons`** | Development | Geometry | Polygons construction | 
+| **`feature-squares`** | Development | Figures | Squares | 
+| **`feature-triangles`** | Development |  Figures| Equilateral triangles | 
+| **`feature-floodfill`** | Development | Filling | Bucket tool | 
+| **`feature-imgui`** | Development | UI | tools panel |
+| **`feature-transformations`** | Development | Transformations | Rotation,Scale,Translation |
+| **`final-release`** | Delivery | Consolidation | Delivery of the final exam  |
