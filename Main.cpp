@@ -12,18 +12,33 @@ PAINT BASADO EN OPENGL USANDO GLAD, GLFW Y IMGUI
 #include "ImGui/imgui_impl_opengl3.h"
 #include <cmath>
 
-//Variables globales para el estado del paint
-//Se establecen las herramientas disponibles para el usuario
-//Determinan que algoritmo de dibujo se va a ejecutar
+/*
+Sistema de herramientas disponible para el usuario
+
+Cada valor del enum representa un modo de dibujo distinto
+La herramienta seleccionada determina que algoritmo se ejecutara
+cuando el usuario interactue con la cuadricula
+*/
 enum herramienta { Ninguna, Linea, Circulo,Poligono,balde,Cuadrado,Triangulo};
 herramienta herramientaActual = Ninguna; //Inicia seleccionando la linea por defecto
 
-//Esta seccion funciona en base a una maquina de estados
-//0 -> espera el primer click
-//1 -> espera el segundo click
-// 
-//Linea: el click 1 = inicio, click 2 = fin
-//Circulo: el click  1 = centro, click 2 = radio
+/*
+Máquina de estados encargada de gestionar la creación de figuras.
+Estado 0:
+- Espera el primer clic.
+Estado 1:
+- Espera el segundo clic.
+Dependiendo de la herramienta activa:
+Línea:
+	clic 1 = punto inicial
+	clic 2 = punto final
+Círculo:
+	clic 1 = centro
+	clic 2 = radio
+Cuadrado/Triángulo:
+	clic 1 = punto de referencia
+	clic 2 = tamaño de la figura
+*/
 int estadoClick = 0;
 
 //Coordenadas de celdas seleccionadas por el usuario
@@ -47,15 +62,38 @@ int figuraSeleccionada = 0;
 //Variable del balde
 int idRellenoActual = 2;
 
-//Se implementa la matriz de cuadricula 
+/*
+Representación lógica del lienzo.
+
+Cada celda almacena:
+
+0 = espacio vacío
+1 = borde de una figura
+2+ = región rellenada mediante Flood Fill
+
+La matriz es utilizada tanto para los algoritmos de rasterización
+como para detectar regiones válidas de relleno.
+*/
+
 const int GRID_SIZE = 400; //0 = vacio , 1= borde, 2= relleno 
 int grid[GRID_SIZE][GRID_SIZE] = { 0 };
 
 float escalaGrid = 0.1f;
 bool actualizarBuffers = false;
 
-//Almacena la informacion necesaria para volver a dibujar
-//Una figura en cada frame sin recalcular sus vertices
+/*
+Representa una figura ya creada en el lienzo.
+
+Contiene:
+
+- Recursos OpenGL (VAO y VBO)
+- Datos de color
+- Transformaciones geométricas
+- Centro geométrico para rotación y escalado
+
+Permite renderizar la figura en cada frame sin recalcular
+sus vértices ni volver a ejecutar los algoritmos de dibujo.
+*/
 
 struct FiguraDibujada { //struct agrupa las variables en distintos tipos de datos bajo un mismo nombre
 	
@@ -94,6 +132,15 @@ std::vector<Punto> verticesPoligono;
 //Guarda todas las figuras creadas para que permanezcan visibles en todo el programa
 std::vector<Punto> ultimoRelleno;
 std::vector<FiguraDibujada> historialFiguras;
+/*
+Contenedor principal del lienzo.
+
+Todas las figuras generadas se almacenan aquí para ser
+redibujadas en cada frame.
+
+Equivale conceptualmente a las capas visibles del Paint.
+*/
+
 std::vector<float> lineaVertices;
 std::vector<float> circuloVertices;
 
@@ -220,7 +267,23 @@ bool poligonoCerrado()
 	return (primero.x == ultimo.x &&
 		primero.y == ultimo.y);
 }
-//Implementacion de Flood Fill
+/*
+Implementación iterativa del algoritmo Flood Fill.
+
+Utiliza Breadth-First Search (BFS) mediante una cola (std::queue)
+para evitar problemas de desbordamiento de pila que pueden ocurrir
+en implementaciones recursivas.
+
+El algoritmo expande la región visitando los vecinos:
+
+- Derecha
+- Izquierda
+- Arriba
+- Abajo
+
+hasta encontrar un borde o una región previamente rellenada.
+*/
+
 std::vector<Punto> floodFill(int startX, int startY)
 {
 	std::vector<Punto> celdasRellenadas;
@@ -303,8 +366,22 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 		glfwGetWindowSize(window, &width, &height);
 		if (height == 0) height = 1;
 
-		// 1. Conversión de coordenadas en píxeles al sistema NDC(normalized device coordinates o espacio de coordenadas 3D) de OpenGL
-		//NDC va desde -1 a 1
+		/*
+        Conversión de coordenadas del cursor.
+ 
+        Flujo:
+     
+        Coordenadas de pantalla (pixeles)
+		↓
+		NDC [-1,1]
+		↓
+		Coordenadas del mundo
+		↓
+		Coordenadas discretas de la cuadrícula
+ 
+		Este proceso permite convertir la posición real del mouse
+		en una celda específica del sistema de dibujo.
+		*/
 
 		float ndcX = (2.0f * mouseX) / width - 1.0f;
 		float ndcY = 1.0f - (2.0f * mouseY) / height;
@@ -324,7 +401,14 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 		int gridX = std::floor(worldX / escalaGrid);
 		int gridY = std::floor(worldY / escalaGrid);
 
-		//Implementacion de la herramienta balde
+		/*
+		La herramienta balde ejecuta Flood Fill sobre la celda
+		seleccionada por el usuario.
+
+		Las celdas resultantes se almacenan para generar posteriormente
+		los vértices que serán enviados a la GPU.
+		*/
+
 		if (herramientaActual == balde)
 		{
 			ultimoRelleno =
@@ -414,7 +498,16 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 
 
 //Vertex Shader Source Code
-//Recibe los vertices y les aplica la matriz de proyeccion
+/*
+Vertex Shader.
+
+Responsabilidades:
+
+- Recibir la posición de cada vértice.
+- Aplicar transformaciones locales (Model Matrix).
+- Aplicar la proyección ortográfica.
+- Enviar la posición final al pipeline gráfico.
+*/
 //antes de enviarlos al pipeline grafico
 const char* vertexShaderSource = "#version 330 core\n"
 "layout (location = 0) in vec3 aPos;\n"
@@ -426,7 +519,12 @@ const char* vertexShaderSource = "#version 330 core\n"
 "}\0";
 
 //Fragment Shader Source Code
-//Define el color de los fragmentos generados
+/*
+Se ejecuta para cada fragmento generado por OpenGL.
+
+Su única función es asignar el color correspondiente
+a la figura actualmente renderizada.
+*/
 const char* fragmentShaderSource = "#version 330 core\n"
 "out vec4 FragColor;\n"
 "uniform vec4 objectColor;\n" // <- CORREGIDO: Todo en minúsculas para evitar conflictos
@@ -435,10 +533,17 @@ const char* fragmentShaderSource = "#version 330 core\n"
 " FragColor = objectColor;\n"
 "}\n\0";
 
-// Funcion de Bresenham Modificada para alinear los cuadrados dentro de la grilla
-// 
-//Cada celda recorrida por la linea se representa mediante un
-// cuadrado compuesto por dos triangulos
+/*
+Implementación del algoritmo de Bresenham.
+ 
+En lugar de dibujar píxeles individuales, cada celda recorrida
+por el algoritmo se convierte en un cuadrado formado por dos
+triángulos.
+ 
+Esto permite visualizar el proceso sobre la cuadrícula utilizada
+por el sistema de dibujo.
+ 
+*/
 
 std::vector<float> generarLineasBresenham(int x0, int y0, int x1, int y1, float escala) {
 	std::vector<float> vertices;
@@ -474,8 +579,15 @@ std::vector<float> generarLineasBresenham(int x0, int y0, int x1, int y1, float 
 	}
 	return vertices;
 }
-//Funcion de Bresenham para circulo de celdas rellenas
-// Utiliza simetria de ocho octantes para minimizar calculos 
+/*
+Implementación del algoritmo de Bresenham para círculos.
+ 
+Utiliza la simetría de ocho octantes para reducir la cantidad
+de cálculos necesarios.
+ 
+A partir de un punto calculado se generan automáticamente
+los otros siete puntos equivalentes mediante reflexión.
+*/
 std::vector<float> generarCirculoBresenham(int cx, int cy, int r, float escala) {
 	std::vector<float> vertices;
 
@@ -542,8 +654,10 @@ std::vector<float> generarCirculoBresenham(int cx, int cy, int r, float escala) 
 
 
 //*****************Funcion principal*****************
-//Punto de entrada del programa 
-// el cual inicializa OpenGL,GLFW. ImGui y ejecuta el bucle principal
+//Inicializa GLFW, GLAD, OpenGL, ImGui
+//Configura ventana, shaders, cuadricula
+//Finalmente ejecuta el ciclo principal de renderizado, encargado de
+//procesar eventos, actualizar la interfaz y dibujar las figuras
 int main()
 {
 	// GLFW CONFIG
@@ -837,7 +951,18 @@ int main()
 			glGenBuffers(1, &nuevaVBO);
 			glBindVertexArray(nuevaVAO);
 			glBindBuffer(GL_ARRAY_BUFFER, nuevaVBO);
+			/*
+			Creación de los buffers de OpenGL para la nueva figura.
 
+			VAO:
+				Describe cómo OpenGL interpreta los vértices.
+
+			VBO:
+				Almacena los datos de los vértices en memoria GPU.
+
+			Cada figura posee sus propios buffers para permanecer
+			independiente del resto de elementos del lienzo.
+			*/
 			FiguraDibujada nuevaFigura;
 			nuevaFigura.tx = 0.0f;
 			nuevaFigura.ty = 0.0f;
@@ -1090,6 +1215,18 @@ int main()
 			float s = sin(angulo);
 
 			//Model matrix
+			/*
+			Construcción manual de la matriz de modelo.
+
+			Transformaciones aplicadas:
+
+			1. Escalado
+			2. Rotación alrededor del centro geométrico
+			3. Traslación
+
+			La matriz permite modificar una figura sin alterar
+			sus vértices originales.
+			*/
 			float tx = fig.tx;
 			float ty = fig.ty;
 
