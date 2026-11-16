@@ -1,19 +1,21 @@
 /*
 ------------------------------
-PAINT BASADO EN OPENGL UASNDO GLAD, GLFW Y IMGUI
+PAINT BASADO EN OPENGL USANDO GLAD, GLFW Y IMGUI
 */
 #include <iostream>
 #include <vector>
+#include <queue> //primero en entrar,´primero en salir 
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include "ImGui/imgui.h"
 #include "ImGui/imgui_impl_glfw.h"
 #include "ImGui/imgui_impl_opengl3.h"
+#include <cmath>
 
 //Variables globales para el estado del paint
 //Se establecen las herramientas disponibles para el usuario
 //Determinan que algoritmo de dibujo se va a ejecutar
-enum herramienta { Ninguna, Linea, Circulo,Poligono,};
+enum herramienta { Ninguna, Linea, Circulo,Poligono,balde,Cuadrado,Triangulo};
 herramienta herramientaActual = Ninguna; //Inicia seleccionando la linea por defecto
 
 //Esta seccion funciona en base a una maquina de estados
@@ -32,6 +34,22 @@ int clickX1 = 0, clickY1 = 0;
 //Color seleccionado desde ImGui
 float colorFigura[4] = { 1.0,0.0f,0.0f,1.0f };//Rojo,Verde,azul,Alpha
 
+float trasladoX = 0.0f;
+float trasladoY = 0.0f;
+
+float escalaFigura = 1.0f;
+
+float rotacionFigura = 0.0f;
+
+// Indice de la figura seleccionada
+int figuraSeleccionada = 0;
+
+//Variable del balde
+int idRellenoActual = 2;
+
+//Se implementa la matriz de cuadricula 
+const int GRID_SIZE = 400; //0 = vacio , 1= borde, 2= relleno 
+int grid[GRID_SIZE][GRID_SIZE] = { 0 };
 
 float escalaGrid = 0.1f;
 bool actualizarBuffers = false;
@@ -40,14 +58,30 @@ bool actualizarBuffers = false;
 //Una figura en cada frame sin recalcular sus vertices
 
 struct FiguraDibujada { //struct agrupa las variables en distintos tipos de datos bajo un mismo nombre
-	GLuint vao;
-	GLsizei conteoVertices;
-	GLenum modoDibujo;
+	
+	GLuint vao = 0;
+	GLuint vbo = 0;
 
-	float r;
-	float g;
-	float b;
-	float a;
+	GLsizei conteoVertices = 0;
+	GLenum modoDibujo = GL_TRIANGLES;
+
+	//Se guardan los colores en cada figura
+	float r = 1.0f;
+	float g = 1.0f;
+	float b = 1.0f;
+	float a = 1.0f;
+
+	//Transformaciones de figuras 
+	float tx = 0.0f; //Traslacion en X
+	float ty = 0.0f; //Traslacion en Y
+
+	float escala = 1.0f;
+
+	float rotacion = 0.0f;
+
+	float centroX = 0.0f;
+	float centroY = 0.0f;
+
 };
 struct Punto
 {
@@ -58,14 +92,121 @@ struct Punto
 std::vector<Punto> verticesPoligono;
 
 //Guarda todas las figuras creadas para que permanezcan visibles en todo el programa
+std::vector<Punto> ultimoRelleno;
 std::vector<FiguraDibujada> historialFiguras;
 std::vector<float> lineaVertices;
 std::vector<float> circuloVertices;
+
 GLuint VAO, VBO;
 
 //Declaracion de funciones
 std::vector<float> generarLineasBresenham(int x0, int y0, int x1, int y1, float escala);
 std::vector<float>generarCirculoBresenham(int cx, int cy, int r, float escala);
+
+//Declaracion de la funcion floodFill(rellena por inundacion o balde)
+
+//Funcion de la herramienta Cuadrado
+std::vector<float> generarCuadrado(
+	int x0,
+	int y0,
+	int x1,
+	int y1,
+	float escala)
+{
+	std::vector<float> vertices;
+
+	int lado =std::max(abs(x1 - x0),abs(y1 - y0));
+
+	x1 =x0 +((x1 > x0)	? lado: -lado);
+
+	y1 =y0 +((y1 > y0)? lado: -lado);
+
+	auto lado1 =generarLineasBresenham(x0, y0,x1, y0,escala);
+
+	auto lado2 =generarLineasBresenham(x1, y0,x1, y1,escala);
+
+	auto lado3 =generarLineasBresenham(x1, y1,x0, y1,escala);
+
+	auto lado4 =generarLineasBresenham(x0, y1,x0, y0,escala);
+
+	vertices.insert(vertices.end(),
+		lado1.begin(), lado1.end());
+
+	vertices.insert(vertices.end(),
+		lado2.begin(), lado2.end());
+
+	vertices.insert(vertices.end(),
+		lado3.begin(), lado3.end());
+
+	vertices.insert(vertices.end(),
+		lado4.begin(), lado4.end());
+
+	return vertices;
+}
+
+//Funcion de la herramienta Triangulo
+std::vector<float> generarTriangulo(int x0,int y0,int x1,int y1,float escala)
+{
+	std::vector<float> vertices;
+
+	int lado = abs(x1 - x0);
+	//Correcion del triangulo equilatero
+
+	int cx = (x0 + x1) / 2;
+
+	int altura =static_cast<int>(lado * 0.866f); // √3/2
+
+	auto lado1 =generarLineasBresenham(	x0,y0,x1,y0,escala);
+
+	auto lado2 =generarLineasBresenham(x1,y0,cx,y0 + altura,escala);
+
+	auto lado3 =generarLineasBresenham(cx,y0 + altura,x0,y0,escala);
+
+	vertices.insert(vertices.end(),
+		lado1.begin(), lado1.end());
+
+	vertices.insert(vertices.end(),
+		lado2.begin(), lado2.end());
+
+	vertices.insert(vertices.end(),
+		lado3.begin(), lado3.end());
+
+	return vertices;
+}
+
+//Funcion que genera los vertices relleno 
+std::vector<float> generarVerticesRelleno(
+	const std::vector<Punto>& celdas,
+	float escala)
+{
+	std::vector<float> vertices;
+
+	for (const auto& p : celdas)
+	{
+		int gx = p.x - GRID_SIZE / 2;
+		int gy = p.y - GRID_SIZE / 2;
+
+		float xMin = gx * escala;
+		float xMax = (gx + 1) * escala;
+
+		float yMin = gy * escala;
+		float yMax = (gy + 1) * escala;
+
+		vertices.insert(vertices.end(),
+			{
+				xMin,yMin,0.0f,
+				xMin,yMax,0.0f,
+				xMax,yMin,0.0f,
+
+				xMin,yMax,0.0f,
+				xMax,yMax,0.0f,
+				xMax,yMin,0.0f
+			});
+	}
+
+	return vertices;
+}
+
 
 //Funcion que comprueba el cierre del poligono
 bool poligonoCerrado()
@@ -79,6 +220,43 @@ bool poligonoCerrado()
 	return (primero.x == ultimo.x &&
 		primero.y == ultimo.y);
 }
+//Implementacion de Flood Fill
+std::vector<Punto> floodFill(int startX, int startY)
+{
+	std::vector<Punto> celdasRellenadas;
+
+	std::queue<Punto> cola;
+
+	cola.push({ startX,startY });
+
+	while (!cola.empty())
+	{
+		Punto p = cola.front();
+		cola.pop();
+
+		if (p.x < 0 || p.x >= GRID_SIZE)
+			continue;
+
+		if (p.y < 0 || p.y >= GRID_SIZE)
+			continue;
+
+		if (grid[p.x][p.y] != 0)
+			continue;
+
+		grid[p.x][p.y] = idRellenoActual;
+
+		celdasRellenadas.push_back(p);
+
+		cola.push({ p.x + 1,p.y });
+		cola.push({ p.x - 1,p.y });
+		cola.push({ p.x,p.y + 1 });
+		cola.push({ p.x,p.y - 1 });
+	}
+	idRellenoActual++;
+
+	return celdasRellenadas;
+}
+
 
 //GLFW ejecuta esta funcion automaticamente cuando la ventana cambia
 // de tamaño, el viewport se adapta para seguir ocupando la ventana
@@ -125,7 +303,7 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 		glfwGetWindowSize(window, &width, &height);
 		if (height == 0) height = 1;
 
-		// 1. Conversión de coordenadas en píxeles al sistema NDC de OpenGL
+		// 1. Conversión de coordenadas en píxeles al sistema NDC(normalized device coordinates o espacio de coordenadas 3D) de OpenGL
 		//NDC va desde -1 a 1
 
 		float ndcX = (2.0f * mouseX) / width - 1.0f;
@@ -146,6 +324,19 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 		int gridX = std::floor(worldX / escalaGrid);
 		int gridY = std::floor(worldY / escalaGrid);
 
+		//Implementacion de la herramienta balde
+		if (herramientaActual == balde)
+		{
+			ultimoRelleno =
+				floodFill(
+					gridX + GRID_SIZE / 2,
+					gridY + GRID_SIZE / 2);
+
+			actualizarBuffers = true;
+
+			return;
+		}
+
 		//Sistema de dos clicks
 		// primer click: almacena punto inicial
 		// Segundo click: completa la figura y activa la generacion de vertices
@@ -157,9 +348,11 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 			estadoClick = 1;
 			std::cout << "Primer Click en: (" << clickX0 << ", " << clickY0 << ")" << std::endl;
 		}
-		else if (estadoClick == 1) {
+		else if (estadoClick == 1)
+		 {
 			clickX1 = gridX;
 			clickY1 = gridY;
+
 			//Funcion que guarda los vertices
 			if (herramientaActual == Poligono)
 			{
@@ -226,9 +419,10 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 const char* vertexShaderSource = "#version 330 core\n"
 "layout (location = 0) in vec3 aPos;\n"
 "uniform mat4 projection;\n"
+"uniform mat4 model;\n" //Se modifican los vertex shader para aplicar transformaciones
 "void main()\n"
 "{\n"
-" gl_Position = projection * vec4(aPos, 1.0);\n"
+" gl_Position = projection * model * vec4(aPos, 1.0);\n"
 "}\0";
 
 //Fragment Shader Source Code
@@ -253,6 +447,8 @@ std::vector<float> generarLineasBresenham(int x0, int y0, int x1, int y1, float 
 	int err = dx - dy;
 
 	while (true) {
+		// Implementacion del marcado de bordes de figuras 
+		grid[x0 + GRID_SIZE / 2][y0 + GRID_SIZE / 2] = 1;
 	
 		// cada coordenada representa una celda de la cuadricula
 		// se calculan los limites reales del cuadrado que ocupara esa celda
@@ -290,6 +486,9 @@ std::vector<float> generarCirculoBresenham(int cx, int cy, int r, float escala) 
 	//Funcion auxiliar que genera los vertices de la celda
 	// evitando la repeticion de codigo cada vez que necesita dibujar un punto
 	auto agregarCuadrado = [&](int xc, int yc) {
+		//Marcar bordes de la figura
+		grid[xc + GRID_SIZE / 2][yc + GRID_SIZE / 2] = 1;
+
 		float xMin = xc * escala;
 		float xMax = (xc + 1) * escala;
 		float yMin = yc * escala;
@@ -374,7 +573,7 @@ int main()
 	//Configurar estilo visual
 	ImGui::StyleColorsDark();
 
-	//Iniciar backends para glfw y openGL
+	//Iniciar backends para glfw y openGL para traducir las ordenes graficas
 	ImGui_ImplGlfw_InitForOpenGL(window, true);
 	ImGui_ImplOpenGL3_Init("#version 330 core");
 
@@ -457,13 +656,16 @@ int main()
 	{
 		glfwPollEvents();
 
-		// 1. INICIAR EL CONTEXTO DE IMGUI INMEDIATAMENTE (Mover esto aquí arriba es el truco)
+		//Arregla errores en transformaciones
+		static int figuraAnterior = -1;
+
+		// 1. INICIAR EL CONTEXTO DE IMGUI INMEDIATAMENTE 
 		ImGui_ImplOpenGL3_NewFrame();
 		ImGui_ImplGlfw_NewFrame();
 		ImGui::NewFrame();
 
 		// 2. DISEÑAR TU VENTANA FLOTANTE DE IMGUI
-				// --- Busca esta sección dentro de tu bucle de renderizado (while) ---
+
 		ImGui::Begin("Herramientas del Paint");
 
 		if (ImGui::Button("Modo Linea")) {
@@ -484,13 +686,105 @@ int main()
 		if (ImGui::Button("Modo Poligono"))
 			{
 				herramientaActual = Poligono;
-
 				estadoClick = 0;
-
 				verticesPoligono.clear();
 			}
+
+		//Implementacion del boton balde
+		if (ImGui::Button("Modo Balde"))
+		{
+			herramientaActual = balde;
+			estadoClick = 0;
+			verticesPoligono.clear();
+		}
 		
-		ImGui::Separator();
+		ImGui::Separator(); //Se encarga de controlar los colores
+
+		if (!historialFiguras.empty() &&
+			figuraSeleccionada >= historialFiguras.size())
+		{
+			figuraSeleccionada =
+				(int)historialFiguras.size() - 1;
+		}
+
+		//Boton de limpiar lienzo
+		if (ImGui::Button("Limpiar Lienzo"))
+		{
+			historialFiguras.clear();
+
+			verticesPoligono.clear();
+
+			estadoClick = 0;
+
+			memset(grid, 0, sizeof(grid));
+
+			idRellenoActual = 2;
+		}
+		//Implementacion de cuadrado
+		if (ImGui::Button("Modo Cuadrado"))
+		{
+			herramientaActual = Cuadrado;
+			estadoClick = 0;
+			verticesPoligono.clear();
+		}
+		//Implementacion de triangulo
+		if (ImGui::Button("Modo Triangulo"))
+		{
+			herramientaActual = Triangulo;
+			estadoClick = 0;
+			verticesPoligono.clear();
+		}
+
+		//Slider modifica las figuras en tiempo real
+		if (!historialFiguras.empty())
+		{
+			ImGui::SliderInt("Figura",&figuraSeleccionada,0,(int)historialFiguras.size() - 1);
+		}
+
+		//Se añaden los controles de transformaciones de figuras
+		ImGui::Text("Transformaciones");
+
+		ImGui::SliderFloat(	"Mover X",	&trasladoX,	-1.0f,1.0f);
+
+		ImGui::SliderFloat("Mover Y",&trasladoY,-1.0f,1.0f);
+
+		ImGui::SliderFloat("Escala",&escalaFigura,0.1f,5.0f);
+
+		ImGui::SliderFloat("Rotacion",&rotacionFigura,0.0f,360.0f);
+
+		if (!historialFiguras.empty())
+		{
+			if (figuraSeleccionada != figuraAnterior)
+			{
+				trasladoX =
+					historialFiguras[figuraSeleccionada].tx;
+
+				trasladoY =
+					historialFiguras[figuraSeleccionada].ty;
+
+				escalaFigura =
+					historialFiguras[figuraSeleccionada].escala;
+
+				rotacionFigura =
+					historialFiguras[figuraSeleccionada].rotacion;
+
+				figuraAnterior =
+					figuraSeleccionada;
+			}
+
+			historialFiguras[figuraSeleccionada].tx =
+				trasladoX;
+
+			historialFiguras[figuraSeleccionada].ty =
+				trasladoY;
+
+			historialFiguras[figuraSeleccionada].escala =
+				escalaFigura;
+
+			historialFiguras[figuraSeleccionada].rotacion =
+				rotacionFigura;
+		}
+
 
 		ImGui::Text("Color de la figura");
 
@@ -512,7 +806,17 @@ int main()
 		case Poligono:
 			nombreHerramienta = "POLIGONO";
 			break;
+		case balde:
+			nombreHerramienta = "BALDE";
+			break;
+		case Cuadrado:
+			nombreHerramienta = "CUADRADO";
+			break;
+		case Triangulo:
+			nombreHerramienta = "TRIANGULO";
+			break;
 		}
+
 		// Mostrar dinámicamente la herramienta activa en el menú
 		ImGui::Text("Herramienta activa: %s", nombreHerramienta);
 
@@ -535,14 +839,63 @@ int main()
 			glBindBuffer(GL_ARRAY_BUFFER, nuevaVBO);
 
 			FiguraDibujada nuevaFigura;
-			nuevaFigura.vao = nuevaVAO;
-			nuevaFigura.modoDibujo = GL_TRIANGLES;
+			nuevaFigura.tx = 0.0f;
+			nuevaFigura.ty = 0.0f;
 
+			nuevaFigura.escala = 1.0f;
+
+			nuevaFigura.rotacion = 0.0f;
+
+			nuevaFigura.vao = nuevaVAO;
+			nuevaFigura.vbo = nuevaVBO;
+			nuevaFigura.modoDibujo = GL_TRIANGLES;
+			
+			//Crear una figura de relleno
+			if (herramientaActual == balde)
+			{
+
+				auto rellenoVertices =
+				generarVerticesRelleno(	ultimoRelleno,	escalaGrid);
+
+				glBufferData(
+					GL_ARRAY_BUFFER,
+					rellenoVertices.size() * sizeof(float),
+					rellenoVertices.data(),
+					GL_STATIC_DRAW);
+
+				nuevaFigura.conteoVertices =
+					rellenoVertices.size() / 3;
+
+				nuevaFigura.r = colorFigura[0];
+				nuevaFigura.g = colorFigura[1];
+				nuevaFigura.b = colorFigura[2];
+				nuevaFigura.a = colorFigura[3];
+
+				//Guardar el centro al crear una figura 
+				nuevaFigura.centroX =
+					(clickX0 + clickX1) * escalaGrid * 0.5f;
+
+				nuevaFigura.centroY =
+					(clickY0 + clickY1) * escalaGrid * 0.5f;
+
+				historialFiguras.push_back(nuevaFigura);
+
+			}
+
+			//Figura linea 
 			if (herramientaActual == Linea) {
 				lineaVertices = generarLineasBresenham(clickX0, clickY0, clickX1, clickY1, escalaGrid);
 				glBufferData(GL_ARRAY_BUFFER, lineaVertices.size() * sizeof(float), lineaVertices.data(), GL_STATIC_DRAW);
 				nuevaFigura.conteoVertices = lineaVertices.size() / 3;
 
+				//Guarda el centro al crear una figura 
+				nuevaFigura.centroX =
+					(clickX0 + clickX1) * escalaGrid * 0.5f;
+
+				nuevaFigura.centroY =
+					(clickY0 + clickY1) * escalaGrid * 0.5f;
+
+				//Se configuran los colores 
 				nuevaFigura.r = colorFigura[0];
 				nuevaFigura.g = colorFigura[1];
 				nuevaFigura.b = colorFigura[2];
@@ -561,6 +914,13 @@ int main()
 				nuevaFigura.g = colorFigura[1];
 				nuevaFigura.b = colorFigura[2];
 				nuevaFigura.a = colorFigura[3];
+
+				//Guardar el centro al crear una figura 
+				nuevaFigura.centroX =
+					(clickX0 + clickX1) * escalaGrid * 0.5f;
+
+				nuevaFigura.centroY =
+					(clickY0 + clickY1) * escalaGrid * 0.5f;
 
 				historialFiguras.push_back(nuevaFigura); // Guarda el círculo en el lienzo
 			}
@@ -588,6 +948,76 @@ int main()
 				nuevaFigura.g = colorFigura[1];
 				nuevaFigura.b = colorFigura[2];
 				nuevaFigura.a = colorFigura[3];
+
+				historialFiguras.push_back(nuevaFigura);
+			}
+			//Herramienta de cuadrado
+			else if (herramientaActual == Cuadrado)
+			{
+				auto vertices =
+					generarCuadrado(
+						clickX0,
+						clickY0,
+						clickX1,
+						clickY1,
+						escalaGrid);
+
+				glBufferData(
+					GL_ARRAY_BUFFER,
+					vertices.size() * sizeof(float),
+					vertices.data(),
+					GL_STATIC_DRAW);
+
+				nuevaFigura.conteoVertices =
+					vertices.size() / 3;
+
+				nuevaFigura.r = colorFigura[0];
+				nuevaFigura.g = colorFigura[1];
+				nuevaFigura.b = colorFigura[2];
+				nuevaFigura.a = colorFigura[3];
+
+				//Guardar el centro al crear una figura 
+				nuevaFigura.centroX =
+					(clickX0 + clickX1) * escalaGrid * 0.5f;
+
+				nuevaFigura.centroY =
+					(clickY0 + clickY1) * escalaGrid * 0.5f;
+
+				historialFiguras.push_back(nuevaFigura);
+
+			}
+			//Herramienta de triangulo
+			else if (herramientaActual == Triangulo)
+			{
+				auto vertices =
+					generarTriangulo(
+						clickX0,
+						clickY0,
+						clickX1,
+						clickY1,
+						escalaGrid);
+
+				glBufferData(
+					GL_ARRAY_BUFFER,
+					vertices.size() * sizeof(float),
+					vertices.data(),
+					GL_STATIC_DRAW);
+
+				nuevaFigura.conteoVertices =
+					vertices.size() / 3;
+
+				nuevaFigura.r = colorFigura[0];
+				nuevaFigura.g = colorFigura[1];
+				nuevaFigura.b = colorFigura[2];
+				nuevaFigura.a = colorFigura[3];
+
+				//Guardar el centro al crear una figura 
+				nuevaFigura.centroX =
+					(clickX0 + clickX1) * escalaGrid * 0.5f;
+
+				nuevaFigura.centroY =
+					(clickY0 + clickY1) * escalaGrid * 0.5f;
+
 
 				historialFiguras.push_back(nuevaFigura);
 			}
@@ -623,20 +1053,81 @@ int main()
 		glUseProgram(shaderProgram);
 
 		GLuint projloc = glGetUniformLocation(shaderProgram, "projection");
-		glUniformMatrix4fv(projloc, 1, GL_FALSE, projection);
+
+		glUniformMatrix4fv(projloc,	1,GL_FALSE,projection); //Matriz de proyeccion
+
+		GLuint modelLoc =glGetUniformLocation(shaderProgram,"model"); // Obtener la ubicacion del uniform
 
 		GLuint colorLoc = glGetUniformLocation(shaderProgram, "objectColor");
 
 		// 6. DIBUJAR LA GRILLA BLANCA
 		glUniform4f(colorLoc, 1.0f, 1.0f, 1.0f, 1.0f);
+		//Evita que se deforme la grilla 
 		glBindVertexArray(VAO);
+
+		float identidad[16] =
+		{
+			1,0,0,0,
+			0,1,0,0,
+			0,0,1,0,
+			0,0,0,1
+		};
+
+		glUniformMatrix4fv(
+			modelLoc,
+			1,
+			GL_FALSE,
+			identidad);
 		glDrawArrays(GL_LINES, 0, gridVertices.size() / 3);
 
 		// Redibuja las figuras almacenadas en el lienzo
-		for (const auto& fig : historialFiguras) {
+		for (const auto& fig : historialFiguras){
+			float angulo =
+				fig.rotacion *
+				3.1415926f / 180.0f;
+
+			float c = cos(angulo);
+			float s = sin(angulo);
+
+			//Model matrix
+			float tx = fig.tx;
+			float ty = fig.ty;
+
+			float cx = fig.centroX;
+			float cy = fig.centroY;
+
+			float sx = fig.escala;
+			float sy = fig.escala;
+
+			float model[16] =
+			{
+				sx * c,
+				sx * s,
+				0.0f,
+				0.0f,
+
+			   -sy * s,
+				sy * c,
+				0.0f,
+				0.0f,
+
+				0.0f,
+				0.0f,
+				1.0f,
+				0.0f,
+
+				cx + tx - (sx * c * cx - sy * s * cy),
+				cy + ty - (sx * s * cx + sy * c * cy),
+				0.0f,
+				1.0f
+			};
+			//Usar los colores al dibujar una figura
 
 			glUniform4f(colorLoc,fig.r,fig.g,fig.b,	1.0f);
 			glBindVertexArray(fig.vao);
+
+			//Enviar Matrix Model al shader 
+			glUniformMatrix4fv(modelLoc,1,GL_FALSE,model);
 			glDrawArrays(fig.modoDibujo, 0, fig.conteoVertices);
 		}
 		glBindVertexArray(0);
@@ -655,6 +1146,14 @@ int main()
 
 	glDeleteVertexArrays(1, &VAO);
 	glDeleteBuffers(1, &VBO);
+
+	//Liberar los VAO Y VBO
+	for (auto& fig : historialFiguras)
+	{
+		glDeleteVertexArrays(1,&fig.vao);
+
+		glDeleteBuffers(1,&fig.vbo);
+	}
 
 	//Limpieza
 	glDeleteVertexArrays(1, &VAO); glDeleteBuffers(1, &VBO);
