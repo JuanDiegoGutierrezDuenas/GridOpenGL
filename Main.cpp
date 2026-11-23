@@ -5,8 +5,10 @@ PAINT BASADO EN OPENGL USANDO GLAD, GLFW Y IMGUI
 #include <iostream>
 #include <vector>
 #include <queue> //primero en entrar,´primero en salir 
-#include <glad/glad.h>
-#include <GLFW/glfw3.h>
+#include <glad/glad.h>// GLADA busca y asigna tiempo de ejecucion las direcciones de las funciones
+// que se implementan en el cargador de la tarjeta grafica permitiendo generar archivos de carga 
+#include <GLFW/glfw3.h> //GLFW crea ventanas y gestiona el contexto de OpenGL manejando 
+//eventos de entrada y permitiendo la comunicacion de OpenGL con el sistema operativo
 #include "ImGui/imgui.h"
 #include "ImGui/imgui_impl_glfw.h"
 #include "ImGui/imgui_impl_opengl3.h"
@@ -97,6 +99,8 @@ sus vértices ni volver a ejecutar los algoritmos de dibujo.
 
 struct FiguraDibujada { //struct agrupa las variables en distintos tipos de datos bajo un mismo nombre
 	
+	//-Gluint identifica y almacena objetos siendo un ID para gestionar recursos
+
 	GLuint vao = 0;
 	GLuint vbo = 0;
 
@@ -272,7 +276,7 @@ Implementación iterativa del algoritmo Flood Fill.
 
 Utiliza Breadth-First Search (BFS) mediante una cola (std::queue)
 para evitar problemas de desbordamiento de pila que pueden ocurrir
-en implementaciones recursivas.
+en implementaciones recursivas.335
 
 El algoritmo expande la región visitando los vecinos:
 
@@ -783,7 +787,7 @@ int main()
 		ImGui::Begin("Herramientas del Paint");
 
 		if (ImGui::Button("Modo Linea")) {
-			herramientaActual = Linea; 
+			herramientaActual = Linea;
 			estadoClick = 0;           // Reinicia el flujo de clics
 			lineaVertices.clear();     // Borra el trazo anterior en pantalla si deseas limpiar
 			circuloVertices.clear();   // Borra el círculo para dar espacio a la nueva línea
@@ -798,11 +802,11 @@ int main()
 		}
 
 		if (ImGui::Button("Modo Poligono"))
-			{
-				herramientaActual = Poligono;
-				estadoClick = 0;
-				verticesPoligono.clear();
-			}
+		{
+			herramientaActual = Poligono;
+			estadoClick = 0;
+			verticesPoligono.clear();
+		}
 
 		//Implementacion del boton balde
 		if (ImGui::Button("Modo Balde"))
@@ -811,7 +815,7 @@ int main()
 			estadoClick = 0;
 			verticesPoligono.clear();
 		}
-		
+
 		ImGui::Separator(); //Se encarga de controlar los colores
 
 		if (!historialFiguras.empty() &&
@@ -852,19 +856,19 @@ int main()
 		//Slider modifica las figuras en tiempo real
 		if (!historialFiguras.empty())
 		{
-			ImGui::SliderInt("Figura",&figuraSeleccionada,0,(int)historialFiguras.size() - 1);
+			ImGui::SliderInt("Figura", &figuraSeleccionada, 0, (int)historialFiguras.size() - 1);
 		}
 
 		//Se añaden los controles de transformaciones de figuras
 		ImGui::Text("Transformaciones");
 
-		ImGui::SliderFloat(	"Mover X",	&trasladoX,	-1.0f,1.0f);
+		ImGui::SliderFloat("Mover X", &trasladoX, -1.0f, 1.0f);
 
-		ImGui::SliderFloat("Mover Y",&trasladoY,-1.0f,1.0f);
+		ImGui::SliderFloat("Mover Y", &trasladoY, -1.0f, 1.0f);
 
-		ImGui::SliderFloat("Escala",&escalaFigura,0.1f,5.0f);
+		ImGui::SliderFloat("Escala", &escalaFigura, 0.1f, 5.0f);
 
-		ImGui::SliderFloat("Rotacion",&rotacionFigura,0.0f,360.0f);
+		ImGui::SliderFloat("Rotacion", &rotacionFigura, 0.0f, 360.0f);
 
 		if (!historialFiguras.empty())
 		{
@@ -901,7 +905,7 @@ int main()
 
 
 		ImGui::Text("Color de la figura");
-
+		
 		ImGui::ColorEdit4("##ColorFigura",colorFigura);
 
 		//Nombre herramienta en menu
@@ -956,9 +960,16 @@ int main()
 
 			VAO:
 				Describe cómo OpenGL interpreta los vértices.
+				Guardando el orden en el que se conectan los vertices
 
 			VBO:
 				Almacena los datos de los vértices en memoria GPU.
+				(Colores, posiciones, coordenadas de textura)
+
+			Vertex y fragment shaders son programas que transforamn los vertices
+			y pintan los pixeles en pantalla.
+			
+			El llaado al dibujo lo hace glDrawArrays/ gl DrawEleemnts
 
 			Cada figura posee sus propios buffers para permanecer
 			independiente del resto de elementos del lienzo.
@@ -1156,7 +1167,7 @@ int main()
 		}
 
 		// 5. OBTENER TAMAÑO Y ENVIAR MATRIZ PROJECTION
-		// Construye la proyeccion ortografica
+		// Construye la proyeccion ortografica( transforma volumen de 3D en un espacio 2D)
 		// Mantiene la escala de la cuadricula independientemente del tamaño de la ventana
 		int width, height;
 		glfwGetFramebufferSize(window, &width, &height);
